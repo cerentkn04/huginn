@@ -1,0 +1,16 @@
+# Go build output
+/huginn
+*.exe
+*.test
+
+# Web (once the React project exists)
+web/node_modules/
+web/dist/
+web/build/
+
+# OS/editor cruft
+.DS_Store
+*.swp
+
+# Env/secrets
+.env

@@ -1,0 +1,12 @@
+game: huginn-fps-demo
+image: hugin-server:latest
+min_instances: 2
+max_instances: 5
+port: 7778
+udp_listen_addr: "0.0.0.0:9000"
+http_listen_addr: ":8080"
+heartbeat_timeout_seconds: 15
+mode: "sdk"
+max_players: 5
+buffer_size: 2
+public_host: "34.30.42.253"
