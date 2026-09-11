@@ -1,14 +1,17 @@
 package core
 
 import (
+		"context"
 	"encoding/json"
-	"net/http"
-	"context"
-	"log"
 	"fmt"
+	"io/fs"
+	"log"
+	"net/http"
 	"time"
+
 	"github.com/docker/docker/client"
-)
+	"huginn/internal/web"
+	)
 
 type summary struct {
 	TotalInstances int
@@ -23,6 +26,9 @@ func NewRestServer(ctx context.Context , cli *client.Client, cfg Config, reg *Re
 	ApiStop(mux,ctx,cli,reg)
 	ApiFleetStream(mux, reg)
 	ApiServers(mux,reg)
+	if err := ServeDashboard(mux); err != nil {
+	log.Printf("huginn: dashboard unavailable: %v", err)
+}
 	return &http.Server{Addr: cfg.HTTPListenAddr, Handler: mux}
 }
 func ApiAvailable(mux *http.ServeMux,reg *Registry){
@@ -146,6 +152,12 @@ func ApiCode(mux *http.ServeMux , reg *Registry){
 		}
 		json.NewEncoder(w).Encode(inst)
 	})
-
-
+}
+func ServeDashboard(mux *http.ServeMux) error {
+	dist, err := fs.Sub(web.Files, "dist")
+	if err != nil {
+		return fmt.Errorf("dashboard: %w", err)
+	}
+	mux.Handle("/", http.FileServer(http.FS(dist)))
+	return nil
 }
