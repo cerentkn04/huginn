@@ -9,4 +9,5 @@ heartbeat_timeout_seconds: 15
 mode: "sdk"
 max_players: 5
 buffer_size: 2
-public_host: "34.30.42.253"
+public_host: ""
+cloud_provider: "gcp"

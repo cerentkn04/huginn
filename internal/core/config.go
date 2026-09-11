@@ -20,6 +20,7 @@ type Config struct {
 	HTTPListenAddr   string `yaml:"http_listen_addr"`
 	HeartbeatTimeout int    `yaml:"heartbeat_timeout_seconds"`
 	Mode		 string  `yaml:"mode"`
+ 	CloudProvider string `yaml:"cloud_provider"`
 	PublicHost	 string  `yaml:"public_host"`
 }
 
@@ -72,7 +73,12 @@ func (c Config) validate() error {
 	if c.BufferSize <= 0 {
  	   errs = append(errs, "buffer_size must be > 0")
 	}
-
+	if c.CloudProvider != "gcp" && c.CloudProvider != "aws" && c.CloudProvider != "custom" {
+		errs = append(errs, "cloud_provider must be one of: gcp, aws, custom")
+	}
+	if c.CloudProvider == "custom" && c.PublicHost == "" {
+		errs = append(errs, "public_host is required when cloud_provider is custom")
+	}
 	if len(errs) > 0 {
 		return errors.New(strings.Join(errs, "; "))
 	}
