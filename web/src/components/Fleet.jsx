@@ -1,50 +1,7 @@
-// src/components/Fleet.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";// src/components/Fleet.jsx
 
-// Mock data — matches the real Instance JSON shape from the Go backend.
-// Replace this with live data on Day 3.
-const mockInstances = [
-  {
-    ID: "huginn-inst-0",
-    ContainerID: "5a3c1b839b997b3ed5641fe873db2464bf130ce61aa44d75f052a5673809cf46",
-    State: "ready",
-    PlayerCount: 3,
-    MaxPlayers: 5,
-    LastHeartbeat: "2026-09-11T09:14:52Z",
-    JoinCode: "751f",
-    Address: "34.30.42.253:7778",
-  },
-  {
-    ID: "huginn-inst-1",
-    ContainerID: "7aee53e5af52a3a5aefff59776f6cd3cd394c649218907f09d8f6116a75ef7ed",
-    State: "starting",
-    PlayerCount: 0,
-    MaxPlayers: 5,
-    LastHeartbeat: "2026-09-11T09:14:50Z",
-    JoinCode: "590f",
-    Address: "34.30.42.253:7779",
-  },
-  {
-    ID: "huginn-inst-2",
-    ContainerID: "d6525e1805b89fdd93f2b12345abcd6789ef0123456789abcdef0123456789a",
-    State: "draining",
-    PlayerCount: 0,
-    MaxPlayers: 5,
-    LastHeartbeat: "2026-09-11T09:14:49Z",
-    JoinCode: "0ad1",
-    Address: "34.30.42.253:7780",
-  },
-  {
-    ID: "huginn-inst-3",
-    ContainerID: "9afdd93f2b6ba59204f047649218907f09d8f6116a75ef7ed1234567890abcd",
-    State: "unhealthy",
-    PlayerCount: 1,
-    MaxPlayers: 5,
-    LastHeartbeat: "2026-09-11T09:12:10Z",
-    JoinCode: "3fc2",
-    Address: "34.30.42.253:7781",
-  },
-];
+
+
 
 const stateColors = {
   ready: "#4ade80",
@@ -76,6 +33,9 @@ function Field({ label, value, onCopy }) {
 }
 export default function Fleet({ instances }) {
   const [selectedId, setSelectedId] = useState(null);
+  const [confirmingStop, setConfirmingStop] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [stopError, setStopError] = useState(null);
 
 
   const totalInstances = instances.length;
@@ -83,12 +43,28 @@ export default function Fleet({ instances }) {
   const available = instances.filter(
     (i) => i.State === "ready" && i.PlayerCount < i.MaxPlayers
   ).length;
-
+  useEffect(() => {
+    setConfirmingStop(false);
+    setStopError(null);
+  }, [selectedId]);
   const selected = instances.find((i) => i.ID === selectedId) || null;
 
-  const handleStop = (id) => {
-    // wired to POST /api/servers/stop/{id} on Day 4 — no-op for now
-    console.log("stop requested for", id);
+  const handleStop = async (id) => {
+    setStopping(true);
+    setStopError(null);
+    try {
+      const res = await fetch(`/api/servers/stop/${id}`, { method: "POST" });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text.trim() || `HTTP ${res.status}`);
+      }
+      setSelectedId(null);
+      setConfirmingStop(false);
+    } catch (err) {
+      setStopError(err.message);
+    } finally {
+      setStopping(false);
+    }
   };
 
   return (
@@ -175,9 +151,48 @@ export default function Fleet({ instances }) {
                 <Field label="Last Heartbeat" value={selected.LastHeartbeat} />
               </div>
 
-              <button style={styles.stopButton} onClick={() => handleStop(selected.ID)}>
-                Stop Instance
-              </button>
+                         {stopError && <div style={styles.error}>{stopError}</div>}
+
+              {!confirmingStop ? (
+                <button
+                  style={{ ...styles.button, ...styles.dangerButton, marginTop: "16px" }}
+                  onClick={() => setConfirmingStop(true)}
+                >
+                  Stop Instance
+                </button>
+              ) : (
+                <div style={styles.confirmBox}>
+                  <div style={styles.confirmText}>
+                    Stop <strong>{selected.ID}</strong>?
+                    {selected.PlayerCount > 0 &&
+                      ` ${selected.PlayerCount} player(s) will be disconnected.`}
+                  </div>
+                  <div style={styles.confirmActions}>
+                    <button
+                      style={{
+                        ...styles.button,
+                        ...styles.dangerButton,
+                        ...(stopping ? styles.buttonDisabled : {}),
+                      }}
+                      disabled={stopping}
+                      onClick={() => handleStop(selected.ID)}
+                    >
+                      {stopping ? "Stopping…" : "Yes, stop"}
+                    </button>
+                    <button
+                      style={{
+                        ...styles.button,
+                        ...styles.secondaryButton,
+                        ...(stopping ? styles.buttonDisabled : {}),
+                      }}
+                      disabled={stopping}
+                      onClick={() => setConfirmingStop(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -248,6 +263,47 @@ const styles = {
     borderRadius: "4px",
     overflow: "hidden",
   },
+  button: {
+    border: "none",
+    padding: "8px 16px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontWeight: 500,
+    fontFamily: "inherit",
+    lineHeight: 1.2,
+  },
+  dangerButton: { background: "#dc2626", color: "#fff" },
+  secondaryButton: { background: "#374151", color: "#e5e7eb" },
+  buttonDisabled: { opacity: 0.5, cursor: "not-allowed" },
+
+  confirmBox: {
+    marginTop: "20px",
+    padding: "14px 16px",
+    background: "rgba(220, 38, 38, 0.08)",
+    border: "1px solid rgba(220, 38, 38, 0.3)",
+    borderRadius: "8px",
+    maxWidth: "420px",
+  },
+  confirmText: {
+    fontSize: "13px",
+    color: "#fbbf24",
+    marginBottom: "12px",
+    lineHeight: 1.5,
+  },
+  confirmActions: { display: "flex", gap: "8px" },
+
+  error: {
+    display: "inline-block",
+    color: "#fca5a5",
+    background: "rgba(220, 38, 38, 0.12)",
+    border: "1px solid rgba(220, 38, 38, 0.35)",
+    padding: "6px 12px",
+    borderRadius: "6px",
+    marginTop: "16px",
+    fontSize: "13px",
+  },
+ 
   barFill: { height: "100%", background: "#4ade80" },
   fieldGrid: {
     display: "grid",
@@ -275,15 +331,6 @@ const styles = {
     cursor: "pointer",
   },
   placeholder: { color: "#6b7280", fontStyle: "italic" },
-  detailTitle: { marginTop: 0 },
-  detailRow: { marginBottom: "8px", color: "#ccc" },
-  stopButton: {
-    marginTop: "16px",
-    background: "#dc2626",
-    color: "#fff",
-    border: "none",
-    padding: "8px 16px",
-    borderRadius: "4px",
-    cursor: "pointer",
-  },
+  detailTitle: { marginTop: 0 }, 
+
 };
