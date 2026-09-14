@@ -1,7 +1,4 @@
-import { useState, useEffect } from "react";// src/components/Fleet.jsx
-
-
-
+import { useState, useEffect } from "react";
 
 const stateColors = {
   ready: "#4ade80",
@@ -16,6 +13,7 @@ function timeAgo(isoString) {
   const minutes = Math.floor(seconds / 60);
   return `${minutes}m ago`;
 }
+
 function Field({ label, value, onCopy }) {
   return (
     <div style={styles.field}>
@@ -31,22 +29,24 @@ function Field({ label, value, onCopy }) {
     </div>
   );
 }
-export default function Fleet({ instances }) {
+
+export default function Fleet({ instances, loaded }) {
   const [selectedId, setSelectedId] = useState(null);
   const [confirmingStop, setConfirmingStop] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [stopError, setStopError] = useState(null);
-
 
   const totalInstances = instances.length;
   const totalPlayers = instances.reduce((sum, i) => sum + i.PlayerCount, 0);
   const available = instances.filter(
     (i) => i.State === "ready" && i.PlayerCount < i.MaxPlayers
   ).length;
+
   useEffect(() => {
     setConfirmingStop(false);
     setStopError(null);
   }, [selectedId]);
+
   const selected = instances.find((i) => i.ID === selectedId) || null;
 
   const handleStop = async (id) => {
@@ -71,41 +71,47 @@ export default function Fleet({ instances }) {
     <div style={styles.container}>
       <div style={styles.summaryRow}>
         <div style={styles.statCard}>
-          <div style={styles.statValue}>{totalInstances}</div>
+          <div style={styles.statValue}>{loaded ? totalInstances : "—"}</div>
           <div style={styles.statLabel}>Instances</div>
         </div>
         <div style={styles.statCard}>
-          <div style={styles.statValue}>{totalPlayers}</div>
+          <div style={styles.statValue}>{loaded ? totalPlayers : "—"}</div>
           <div style={styles.statLabel}>Players</div>
         </div>
         <div style={styles.statCard}>
-          <div style={styles.statValue}>{available}</div>
+          <div style={styles.statValue}>{loaded ? available : "—"}</div>
           <div style={styles.statLabel}>Available</div>
         </div>
       </div>
 
       <div style={styles.splitView}>
         <div style={styles.sidebar}>
-          {instances.map((inst) => (
-            <div
-              key={inst.ID}
-              style={{
-                ...styles.row,
-                background: inst.ID === selectedId ? "#1f2937" : "#161b22",
-              }}
-              onClick={() => setSelectedId(inst.ID)}
-            >
-              <span style={{ ...styles.dot, background: stateColors[inst.State] }} />
-              <span style={styles.id}>{inst.ID}</span>
-              <span style={styles.players}>
-                {inst.PlayerCount}/{inst.MaxPlayers}
-              </span>
-              <span style={styles.heartbeat}>{timeAgo(inst.LastHeartbeat)}</span>
-            </div>
-          ))}
+          {!loaded ? (
+            <div style={styles.sidebarNote}>Loading fleet…</div>
+          ) : instances.length === 0 ? (
+            <div style={styles.sidebarNote}>No instances running</div>
+          ) : (
+            instances.map((inst) => (
+              <div
+                key={inst.ID}
+                style={{
+                  ...styles.row,
+                  background: inst.ID === selectedId ? "#1f2937" : "#161b22",
+                }}
+                onClick={() => setSelectedId(inst.ID)}
+              >
+                <span style={{ ...styles.dot, background: stateColors[inst.State] }} />
+                <span style={styles.id}>{inst.ID}</span>
+                <span style={styles.players}>
+                  {inst.PlayerCount}/{inst.MaxPlayers}
+                </span>
+                <span style={styles.heartbeat}>{timeAgo(inst.LastHeartbeat)}</span>
+              </div>
+            ))
+          )}
         </div>
 
-               <div style={styles.detailPane}>
+        <div style={styles.detailPane}>
           {!selected ? (
             <div style={styles.placeholder}>Select an instance to view details</div>
           ) : (
@@ -151,7 +157,7 @@ export default function Fleet({ instances }) {
                 <Field label="Last Heartbeat" value={selected.LastHeartbeat} />
               </div>
 
-                         {stopError && <div style={styles.error}>{stopError}</div>}
+              {stopError && <div style={styles.error}>{stopError}</div>}
 
               {!confirmingStop ? (
                 <button
@@ -222,6 +228,12 @@ const styles = {
     flexDirection: "column",
     gap: "6px",
   },
+  sidebarNote: {
+    color: "#6b7280",
+    fontSize: "13px",
+    fontStyle: "italic",
+    padding: "12px 14px",
+  },
   row: {
     display: "flex",
     alignItems: "center",
@@ -244,12 +256,16 @@ const styles = {
     color: "#fff",
     minHeight: "300px",
   },
-    detailHeader: { display: "flex",  justifyContent: "space-between",
-         alignItems: "center", gap: "12px" },
+  detailHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+  },
+  detailTitle: { marginTop: 0 },
   badge: {
     padding: "2px 10px",
     borderRadius: "999px",
-  
     fontSize: "12px",
     fontWeight: "bold",
     color: "#0d1117",
@@ -263,6 +279,35 @@ const styles = {
     borderRadius: "4px",
     overflow: "hidden",
   },
+  barFill: { height: "100%", background: "#4ade80" },
+
+  fieldGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "16px",
+    marginTop: "16px",
+  },
+  field: {},
+  fieldLabel: {
+    fontSize: "11px",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+    color: "#6b7280",
+    marginBottom: "2px",
+  },
+  fieldValueRow: { display: "flex", alignItems: "center", gap: "8px" },
+  fieldValue: { color: "#fff", fontSize: "14px" },
+  copyButton: {
+    background: "#1f2937",
+    color: "#ccc",
+    border: "none",
+    padding: "2px 8px",
+    borderRadius: "4px",
+    fontSize: "11px",
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+
   button: {
     border: "none",
     padding: "8px 16px",
@@ -303,34 +348,6 @@ const styles = {
     marginTop: "16px",
     fontSize: "13px",
   },
- 
-  barFill: { height: "100%", background: "#4ade80" },
-  fieldGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "16px",
-    marginTop: "16px",
-  },
-  field: {},
-  fieldLabel: {
-    fontSize: "11px",
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-    color: "#6b7280",
-    marginBottom: "2px",
-  },
-  fieldValueRow: { display: "flex", alignItems: "center", gap: "8px" },
-  fieldValue: { color: "#fff", fontSize: "14px" },
-  copyButton: {
-    background: "#1f2937",
-    color: "#ccc",
-    border: "none",
-    padding: "2px 8px",
-    borderRadius: "4px",
-    fontSize: "11px",
-    cursor: "pointer",
-  },
-  placeholder: { color: "#6b7280", fontStyle: "italic" },
-  detailTitle: { marginTop: 0 }, 
 
+  placeholder: { color: "#6b7280", fontStyle: "italic" },
 };

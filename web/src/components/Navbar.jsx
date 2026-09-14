@@ -1,5 +1,12 @@
 // src/components/Navbar.jsx
-export default function Navbar({ activeTab, onTabChange, connected }) {
+const statusDisplay = {
+  live: { color: "#4ade80", label: "Live" },
+  connecting: { color: "#facc15", label: "Reconnecting…" },
+  offline: { color: "#f87171", label: "Disconnected" },
+};
+
+export default function Navbar({ activeTab, onTabChange, status }) {
+   const s = statusDisplay[status] ?? statusDisplay.offline;
   return (
     <nav style={styles.nav}>
       <div style={styles.left}>
@@ -18,9 +25,7 @@ export default function Navbar({ activeTab, onTabChange, connected }) {
         </button>
       </div>
       <div style={styles.right}>
-        <span style={{ color: connected ? "#4ade80" : "#f87171" }}>
-          ● {connected ? "Live" : "Disconnected"}
-        </span>
+         <span style={{ color: s.color }}>● {s.label}</span>
       </div>
     </nav>
   );
