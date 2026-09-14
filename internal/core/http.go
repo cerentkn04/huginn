@@ -4,15 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/docker/docker/client"
+	"github.com/goccy/go-yaml"
+	"huginn/internal/web"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"time"
-
-	"github.com/docker/docker/client"
-	"github.com/goccy/go-yaml"
-	"huginn/internal/web"
 )
 
 type summary struct {
@@ -69,12 +68,10 @@ func ApiFleetStream(mux *http.ServeMux, reg *Registry) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
-		// send one immediately so the dashboard isn't blank for the first second
 		if err := writeSnapshot(w, flusher, reg); err != nil {
 			log.Printf("huginn: sse: initial write failed: %v", err)
 			return
