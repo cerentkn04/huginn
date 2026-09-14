@@ -6,9 +6,11 @@ import (
 
 	"huginn/internal/types"
 )
+
 type UDPSender struct {
 	conn *net.UDPConn
 }
+
 func NewUDPSender(addr string) (*UDPSender, error) {
 	raddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {

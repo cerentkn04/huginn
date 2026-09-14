@@ -3,9 +3,9 @@ package core
 import (
 	"context"
 	"fmt"
+	"github.com/docker/docker/client"
 	"log"
 	"time"
-	"github.com/docker/docker/client"
 )
 
 func RunScalingLoop(ctx context.Context, cli *client.Client, cfg Config, reg *Registry) error {
@@ -33,7 +33,6 @@ func RunScalingLoop(ctx context.Context, cli *client.Client, cfg Config, reg *Re
 
 			instanceID := fmt.Sprintf("huginn-inst-%d", nextIndex)
 			hostPort := cfg.GamePort + nextIndex
-		
 
 			containerID, err := StartInstance(ctx, cli, cfg, instanceID, hostPort)
 			if err != nil {

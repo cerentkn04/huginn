@@ -3,14 +3,15 @@ package sidecar
 import (
 	"bufio"
 	"context"
+	"huginn/internal/types"
 	"log"
 	"os"
 	"regexp"
 	"strconv"
 	"sync/atomic"
 	"time"
-	"huginn/internal/types"
 )
+
 var playerCountRe = regexp.MustCompile(`player_count=(\d+)`)
 
 func RunLogParse(ctx context.Context, cfg Config, sender *UDPSender) error {
@@ -84,4 +85,3 @@ func waitForFile(ctx context.Context, path string) (*os.File, error) {
 		}
 	}
 }
-

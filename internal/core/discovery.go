@@ -1,13 +1,14 @@
 package core
 
-import(
-	"net/http"
+import (
 	"io"
-	"time"
 	"log"
+	"net/http"
 	"strings"
+	"time"
 )
-func DiscoverPublicHost(cfg Config) string{
+
+func DiscoverPublicHost(cfg Config) string {
 	if cfg.PublicHost != "" {
 		return cfg.PublicHost
 	}

@@ -22,7 +22,7 @@ func main() {
 	defer stop()
 	var playerCount int64
 
-srv := sidecar.NewHTTPServer(cfg, sender, &playerCount)
+	srv := sidecar.NewHTTPServer(cfg, sender, &playerCount)
 
 	go func() {
 		log.Printf("sidecar: instance=%s mode=%s HTTP on %s, heartbeats -> %s",
@@ -39,13 +39,12 @@ srv := sidecar.NewHTTPServer(cfg, sender, &playerCount)
 			log.Fatalf("sidecar: log_parse mode failed: %v", err)
 		}
 	case "sdk":
-			if err := sidecar.RunSDKHeartbeats(ctx, cfg, sender, &playerCount); err != nil && ctx.Err() == nil {
-				log.Fatalf("sidecar: sdk mode failed: %v", err)
-			}
+		if err := sidecar.RunSDKHeartbeats(ctx, cfg, sender, &playerCount); err != nil && ctx.Err() == nil {
+			log.Fatalf("sidecar: sdk mode failed: %v", err)
+		}
 	default:
 		log.Fatalf("sidecar: unknown SIDECAR_MODE %q (want log_parse or sdk)", cfg.Mode)
 	}
 
 	log.Println("sidecar: shutting down")
 }
-

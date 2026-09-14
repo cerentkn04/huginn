@@ -17,3 +17,4 @@ web/build/
 web/node_modules/
 web/dist/
 internal/web/dist/
+web/.env.local

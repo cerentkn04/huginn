@@ -3,10 +3,11 @@ package core
 import (
 	"errors"
 	"fmt"
+	"github.com/goccy/go-yaml"
 	"os"
 	"strings"
-	"github.com/goccy/go-yaml"
 )
+
 type Config struct {
 	Game             string `yaml:"game" json:"game"`
 	Image            string `yaml:"image" json:"image"`
@@ -24,6 +25,7 @@ type Config struct {
 
 	path string // where this was loaded from; unexported so it never serializes
 }
+
 func LoadConfig(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -68,11 +70,11 @@ func (c Config) validate() error {
 	if c.HeartbeatTimeout <= 0 {
 		errs = append(errs, "heartbeat_timeout_seconds must be > 0")
 	}
-		if c.MaxPlayers <=0 {
+	if c.MaxPlayers <= 0 {
 		errs = append(errs, "max_players must be > 0")
 	}
 	if c.BufferSize <= 0 {
- 	   errs = append(errs, "buffer_size must be > 0")
+		errs = append(errs, "buffer_size must be > 0")
 	}
 	if c.CloudProvider != "gcp" && c.CloudProvider != "aws" && c.CloudProvider != "custom" {
 		errs = append(errs, "cloud_provider must be one of: gcp, aws, custom")
