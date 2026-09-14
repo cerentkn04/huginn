@@ -1,21 +1,21 @@
 package core
 
-import( 
+import (
 	"context"
+	"github.com/docker/docker/client"
 	"log"
 	"time"
-	"github.com/docker/docker/client"
-
 )
-func RunScaleDown (ctx context.Context, cli *client.Client, cfg Config, reg *Registry)error{
+
+func RunScaleDown(ctx context.Context, cli *client.Client, cfg Config, reg *Registry) error {
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
-		select{
-		case <- ctx.Done():
+		select {
+		case <-ctx.Done():
 			return ctx.Err()
-		case <- ticker.C:
+		case <-ticker.C:
 			found := false
 			var draining Instance
 			for _, inst := range reg.All() {
@@ -47,7 +47,7 @@ func RunScaleDown (ctx context.Context, cli *client.Client, cfg Config, reg *Reg
 					available++
 				}
 			}
-		if available <= cfg.BufferSize || total <= cfg.MinInstances {
+			if available <= cfg.BufferSize || total <= cfg.MinInstances {
 				continue
 			}
 
@@ -58,9 +58,9 @@ func RunScaleDown (ctx context.Context, cli *client.Client, cfg Config, reg *Reg
 					break
 				}
 			}
-		
+
 		}
-	
+
 	}
 
 }

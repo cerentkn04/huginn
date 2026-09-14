@@ -7,6 +7,7 @@ import (
 
 	"huginn/internal/types"
 )
+
 func RunUDPListener(addr string, reg *Registry) error {
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
@@ -24,8 +25,8 @@ func RunUDPListener(addr string, reg *Registry) error {
 	for {
 		n, from, err := conn.ReadFromUDP(buf)
 		if err != nil {
-    			log.Printf("core: udp read error: %v", err)
-    			continue
+			log.Printf("core: udp read error: %v", err)
+			continue
 		}
 		var hb types.Heartbeat
 		if err := json.Unmarshal(buf[:n], &hb); err != nil {

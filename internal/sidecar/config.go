@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 )
+
 type Config struct {
 	InstanceID        string        // unique id for this game server instance
 	Mode              string        // "log_parse" (Day 4) or "sdk" (Day 7)
@@ -13,6 +14,7 @@ type Config struct {
 	LogPath           string        // (log_parse mode) path to the game server's log file to tail
 	HeartbeatInterval time.Duration // how often to send a heartbeat regardless of change
 }
+
 func LoadConfig() Config {
 	return Config{
 		InstanceID:        getEnv("SIDECAR_INSTANCE_ID", "unknown"),
@@ -37,4 +39,3 @@ func getEnvDuration(key string, fallback time.Duration) time.Duration {
 	}
 	return fallback
 }
-

@@ -3,13 +3,14 @@ package core
 import (
 	"context"
 	"fmt"
-	"io"
-	"net"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"io"
+	"net"
 )
+
 func NewDockerClient() (*client.Client, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -49,8 +50,7 @@ func StartInstance(ctx context.Context, cli *client.Client, cfg Config, instance
 		Env: []string{
 			"SIDECAR_INSTANCE_ID=" + instanceID,
 			"SIDECAR_CORE_UDP_ADDR=host.docker.internal:" + corePort,
-		"SIDECAR_MODE=" + cfg.Mode,
-		
+			"SIDECAR_MODE=" + cfg.Mode,
 		},
 		ExposedPorts: nat.PortSet{containerPort: struct{}{}},
 	}
@@ -66,10 +66,10 @@ func StartInstance(ctx context.Context, cli *client.Client, cfg Config, instance
 	if err != nil {
 		return "", fmt.Errorf("docker: creating container %s: %w", instanceID, err)
 	}
-if err := cli.ContainerStart(ctx, created.ID, types.ContainerStartOptions{}); err != nil {
-    _ = cli.ContainerRemove(ctx, created.ID, types.ContainerRemoveOptions{Force: true})
-    return "", fmt.Errorf("docker: starting container %s: %w", instanceID, err)
-}
+	if err := cli.ContainerStart(ctx, created.ID, types.ContainerStartOptions{}); err != nil {
+		_ = cli.ContainerRemove(ctx, created.ID, types.ContainerRemoveOptions{Force: true})
+		return "", fmt.Errorf("docker: starting container %s: %w", instanceID, err)
+	}
 
 	return created.ID, nil
 }

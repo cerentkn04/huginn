@@ -1,12 +1,13 @@
 package sidecar
+
 import (
 	"context"
+	"encoding/json"
+	"huginn/internal/types"
 	"log"
 	"net/http"
 	"sync/atomic"
 	"time"
-	"encoding/json"
-	"huginn/internal/types"
 )
 
 func RunSDKHeartbeats(ctx context.Context, cfg Config, sender *UDPSender, playerCount *int64) error {

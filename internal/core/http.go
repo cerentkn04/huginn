@@ -1,4 +1,5 @@
 package core
+
 import (
 	"context"
 	"encoding/json"
@@ -13,26 +14,27 @@ import (
 	"github.com/goccy/go-yaml"
 	"huginn/internal/web"
 )
+
 type summary struct {
 	TotalInstances int
 	TotalPlayer    int
 }
 
-func NewRestServer(ctx context.Context , cli *client.Client, cfg Config, reg *Registry) *http.Server {
+func NewRestServer(ctx context.Context, cli *client.Client, cfg Config, reg *Registry) *http.Server {
 	mux := http.NewServeMux()
-	ApiAvailable(mux,reg)
-	ApiFleet(mux,reg)
-	ApiCode(mux,reg)
-	ApiStop(mux,ctx,cli,reg)
+	ApiAvailable(mux, reg)
+	ApiFleet(mux, reg)
+	ApiCode(mux, reg)
+	ApiStop(mux, ctx, cli, reg)
 	ApiFleetStream(mux, reg)
-	ApiServers(mux,reg)
+	ApiServers(mux, reg)
 	ApiConfig(mux, cfg)
 	if err := ServeDashboard(mux); err != nil {
-	log.Printf("huginn: dashboard unavailable: %v", err)
-}
+		log.Printf("huginn: dashboard unavailable: %v", err)
+	}
 	return &http.Server{Addr: cfg.HTTPListenAddr, Handler: mux}
 }
-func ApiAvailable(mux *http.ServeMux,reg *Registry){
+func ApiAvailable(mux *http.ServeMux, reg *Registry) {
 	mux.HandleFunc("/api/servers/available", func(w http.ResponseWriter, r *http.Request) {
 		for _, inst := range reg.All() {
 			if inst.State == StateReady && inst.PlayerCount < inst.MaxPlayers {
@@ -44,8 +46,8 @@ func ApiAvailable(mux *http.ServeMux,reg *Registry){
 	})
 
 }
-func ApiFleet(mux *http.ServeMux, reg *Registry){
-		mux.HandleFunc("/api/fleet", func(w http.ResponseWriter, r *http.Request) {
+func ApiFleet(mux *http.ServeMux, reg *Registry) {
+	mux.HandleFunc("/api/fleet", func(w http.ResponseWriter, r *http.Request) {
 		players := 0
 		instances := 0
 		for _, inst := range reg.All() {
@@ -54,7 +56,6 @@ func ApiFleet(mux *http.ServeMux, reg *Registry){
 		}
 		json.NewEncoder(w).Encode(summary{TotalInstances: instances, TotalPlayer: players})
 	})
-
 
 }
 func ApiFleetStream(mux *http.ServeMux, reg *Registry) {
@@ -105,7 +106,7 @@ func writeSnapshot(w http.ResponseWriter, flusher http.Flusher, reg *Registry) e
 	flusher.Flush()
 	return nil
 }
-func ApiServers(mux *http.ServeMux, reg *Registry){
+func ApiServers(mux *http.ServeMux, reg *Registry) {
 	mux.HandleFunc("/api/servers", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(reg.All())
 	})
@@ -114,8 +115,8 @@ func ApiServers(mux *http.ServeMux, reg *Registry){
 func ApiStop(mux *http.ServeMux, ctx context.Context, cli *client.Client, reg *Registry) {
 	mux.HandleFunc("/api/servers/stop/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-    			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-  			 return
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
 		}
 		id := r.URL.Path[len("/api/servers/stop/"):]
 		if id == "" {
@@ -135,11 +136,11 @@ func ApiStop(mux *http.ServeMux, ctx context.Context, cli *client.Client, reg *R
 		reg.Remove(inst.ID)
 		log.Printf("huginn: api: stopped instance %s via REST", inst.ID)
 		json.NewEncoder(w).Encode(inst)
-	})    
+	})
 
-    }
+}
 
-func ApiCode(mux *http.ServeMux , reg *Registry){
+func ApiCode(mux *http.ServeMux, reg *Registry) {
 	mux.HandleFunc("/api/servers/code/", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Path[len("/api/servers/code/"):]
 		if code == "" {

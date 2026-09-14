@@ -3,20 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"time"
+	"huginn/internal/core"
 	"log"
+	"os"
 	"os/signal"
 	"syscall"
-	"huginn/internal/core"
+	"time"
 )
 
-func main(){
-	if len(os.Args) < 3 || os.Args[1] != "start"{
+func main() {
+	if len(os.Args) < 3 || os.Args[1] != "start" {
 		fmt.Fprintln(os.Stderr, "usage: huginn start <config.yaml>")
 		os.Exit(1)
 	}
-	cfg, err:= core.LoadConfig(os.Args[2])
+	cfg, err := core.LoadConfig(os.Args[2])
 	if err != nil {
 		log.Fatalf("huginn: %v", err)
 
@@ -54,9 +54,9 @@ func main(){
 		log.Fatalf("huginn: %v", err)
 	}
 	cfg.PublicHost = core.DiscoverPublicHost(cfg)
-		if cfg.PublicHost == "" {
-   			 log.Println("huginn: WARNING: ...")
-    		}
+	if cfg.PublicHost == "" {
+		log.Println("huginn: WARNING: ...")
+	}
 
 	for i := 0; i < cfg.MinInstances; i++ {
 		instanceID := fmt.Sprintf("huginn-inst-%d", i)
@@ -71,28 +71,28 @@ func main(){
 			}
 			os.Exit(1)
 		}
-			address := fmt.Sprintf("%s:%d", cfg.PublicHost, hostPort)
+		address := fmt.Sprintf("%s:%d", cfg.PublicHost, hostPort)
 		reg.Register(instanceID, containerID, address, cfg.MaxPlayers)
 		log.Printf("huginn: started instance %s on host port %d (container %s)", instanceID, hostPort, containerID[:12])
 	}
 
 	log.Printf("huginn: %d instance(s) running, heartbeats on %s", cfg.MinInstances, cfg.UDPListenAddr)
-	go func(){
-		srv:= core.NewRestServer(ctx,cli,cfg,reg)
-	 if err:= srv.ListenAndServe(); err != nil{
-		log.Printf("huginn: REST API server failed: %v", err)
-	 }
+	go func() {
+		srv := core.NewRestServer(ctx, cli, cfg, reg)
+		if err := srv.ListenAndServe(); err != nil {
+			log.Printf("huginn: REST API server failed: %v", err)
+		}
 	}()
 
 	go func() {
-    		if err := core.RunScalingLoop(ctx, cli, cfg, reg); err != nil && ctx.Err() == nil {
-        		log.Printf("huginn: scaling loop failed: %v", err)
-    		}
+		if err := core.RunScalingLoop(ctx, cli, cfg, reg); err != nil && ctx.Err() == nil {
+			log.Printf("huginn: scaling loop failed: %v", err)
+		}
 	}()
 	go func() {
-    		if err := core.RunScaleDown(ctx, cli, cfg, reg); err != nil && ctx.Err() == nil {
-        		log.Printf("huginn: scale-down loop failed: %v", err)
-    		}
+		if err := core.RunScaleDown(ctx, cli, cfg, reg); err != nil && ctx.Err() == nil {
+			log.Printf("huginn: scale-down loop failed: %v", err)
+		}
 	}()
 	<-ctx.Done()
 

@@ -1,12 +1,15 @@
 package core
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"sort"
 	"sync"
 	"time"
-	"encoding/hex"
-	"crypto/rand"
 )
+
 type InstanceState string
+
 const (
 	StateStarting  InstanceState = "starting"
 	StateReady     InstanceState = "ready"
@@ -19,26 +22,28 @@ type Instance struct {
 	ContainerID   string
 	State         InstanceState
 	PlayerCount   int
-	MaxPlayers    int 
+	MaxPlayers    int
 	LastHeartbeat time.Time
 	JoinCode      string
-	Address	      string
+	Address       string
 }
+
 func generateJoinCode() string {
-    b := make([]byte, 2)
-    rand.Read(b)
-    return hex.EncodeToString(b) 
+	b := make([]byte, 2)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 func (r *Registry) GetByCode(code string) (Instance, bool) {
-    r.mu.RLock()
-    defer r.mu.RUnlock()
-    for _, inst := range r.instances {
-        if inst.JoinCode == code {
-            return *inst, true
-        }
-    }
-    return Instance{}, false
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, inst := range r.instances {
+		if inst.JoinCode == code {
+			return *inst, true
+		}
+	}
+	return Instance{}, false
 }
+
 type Registry struct {
 	mu        sync.RWMutex
 	instances map[string]*Instance
@@ -55,13 +60,13 @@ func (r *Registry) Register(id, containerID, address string, maxPlayers int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.instances[id] = &Instance{
-	   ID:            id,
-           ContainerID:   containerID,
-           Address:       address,
-           MaxPlayers:    maxPlayers,
-           JoinCode:      generateJoinCode(),
-           State:         StateStarting,
-           LastHeartbeat: time.Now(),
+		ID:            id,
+		ContainerID:   containerID,
+		Address:       address,
+		MaxPlayers:    maxPlayers,
+		JoinCode:      generateJoinCode(),
+		State:         StateStarting,
+		LastHeartbeat: time.Now(),
 	}
 }
 func (r *Registry) Heartbeat(id string, playerCount int) {
@@ -75,11 +80,11 @@ func (r *Registry) Heartbeat(id string, playerCount int) {
 	inst.PlayerCount = playerCount
 	inst.LastHeartbeat = time.Now()
 	if inst.State != StateDraining {
-    		inst.State = StateReady
+		inst.State = StateReady
 	}
 
 }
-func (r *Registry) SetState(id string, state InstanceState){
+func (r *Registry) SetState(id string, state InstanceState) {
 	inst, ok := r.instances[id]
 	if !ok {
 		return
@@ -98,6 +103,7 @@ func (r *Registry) All() []Instance {
 	for _, inst := range r.instances {
 		out = append(out, *inst)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 func (r *Registry) Get(id string) (Instance, bool) {
