@@ -7,23 +7,23 @@ import (
 	"strings"
 	"github.com/goccy/go-yaml"
 )
-
 type Config struct {
-	Game             string `yaml:"game"`
-	Image            string `yaml:"image"`
-	MinInstances     int    `yaml:"min_instances"`
-	MaxInstances     int    `yaml:"max_instances"`
-	BufferSize 	 int	`yaml:"buffer_size"`
-	MaxPlayers	 int	`yaml:"max_players"`
-	GamePort         int    `yaml:"port"`
-	UDPListenAddr    string `yaml:"udp_listen_addr"`
-	HTTPListenAddr   string `yaml:"http_listen_addr"`
-	HeartbeatTimeout int    `yaml:"heartbeat_timeout_seconds"`
-	Mode		 string  `yaml:"mode"`
- 	CloudProvider string `yaml:"cloud_provider"`
-	PublicHost	 string  `yaml:"public_host"`
-}
+	Game             string `yaml:"game" json:"game"`
+	Image            string `yaml:"image" json:"image"`
+	MinInstances     int    `yaml:"min_instances" json:"min_instances"`
+	MaxInstances     int    `yaml:"max_instances" json:"max_instances"`
+	BufferSize       int    `yaml:"buffer_size" json:"buffer_size"`
+	MaxPlayers       int    `yaml:"max_players" json:"max_players"`
+	GamePort         int    `yaml:"port" json:"port"`
+	UDPListenAddr    string `yaml:"udp_listen_addr" json:"udp_listen_addr"`
+	HTTPListenAddr   string `yaml:"http_listen_addr" json:"http_listen_addr"`
+	HeartbeatTimeout int    `yaml:"heartbeat_timeout_seconds" json:"heartbeat_timeout_seconds"`
+	Mode             string `yaml:"mode" json:"mode"`
+	PublicHost       string `yaml:"public_host" json:"public_host"`
+	CloudProvider    string `yaml:"cloud_provider" json:"cloud_provider"`
 
+	path string // where this was loaded from; unexported so it never serializes
+}
 func LoadConfig(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -33,6 +33,7 @@ func LoadConfig(path string) (Config, error) {
 		UDPListenAddr:    "0.0.0.0:9000",
 		HTTPListenAddr:   ":8080",
 		HeartbeatTimeout: 15,
+		CloudProvider:    "gcp",
 	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parsing config: %w", err)
@@ -40,9 +41,9 @@ func LoadConfig(path string) (Config, error) {
 	if err := cfg.validate(); err != nil {
 		return Config{}, fmt.Errorf("invalid config: %w", err)
 	}
+	cfg.path = path
 	return cfg, nil
 }
-
 func (c Config) validate() error {
 	var errs []string
 

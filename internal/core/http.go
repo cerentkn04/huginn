@@ -1,18 +1,18 @@
 package core
-
 import (
-		"context"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/goccy/go-yaml"
 	"huginn/internal/web"
-	)
-
+)
 type summary struct {
 	TotalInstances int
 	TotalPlayer    int
@@ -26,6 +26,7 @@ func NewRestServer(ctx context.Context , cli *client.Client, cfg Config, reg *Re
 	ApiStop(mux,ctx,cli,reg)
 	ApiFleetStream(mux, reg)
 	ApiServers(mux,reg)
+	ApiConfig(mux, cfg)
 	if err := ServeDashboard(mux); err != nil {
 	log.Printf("huginn: dashboard unavailable: %v", err)
 }
@@ -159,5 +160,50 @@ func ServeDashboard(mux *http.ServeMux) error {
 		return fmt.Errorf("dashboard: %w", err)
 	}
 	mux.Handle("/", http.FileServer(http.FS(dist)))
+	return nil
+}
+func ApiConfig(mux *http.ServeMux, cfg Config) {
+	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			json.NewEncoder(w).Encode(cfg)
+
+		case http.MethodPost:
+			var newCfg Config
+			if err := json.NewDecoder(r.Body).Decode(&newCfg); err != nil {
+				log.Printf("huginn: api: bad config payload: %v", err)
+				http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			if err := newCfg.validate(); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if err := writeConfig(cfg.path, newCfg); err != nil {
+				log.Printf("huginn: api: failed to write config: %v", err)
+				http.Error(w, "failed to save config", http.StatusInternalServerError)
+				return
+			}
+			log.Printf("huginn: api: config saved to %s (restart required to apply)", cfg.path)
+			json.NewEncoder(w).Encode(newCfg)
+
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+}
+
+func writeConfig(path string, cfg Config) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return fmt.Errorf("write temp config: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("replace config: %w", err)
+	}
 	return nil
 }
