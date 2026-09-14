@@ -1,33 +1,64 @@
-// src/components/Config.jsx
-import { useState } from "react";
-
-const defaultConfig = {
-  game: "",
-  image: "",
-  min_instances: 2,
-  max_instances: 5,
-  buffer_size: 2,
-  max_players: 5,
-  port: 7778,
-  heartbeat_timeout_seconds: 15,
-  udp_listen_addr: "0.0.0.0:9000",
-  http_listen_addr: ":8080",
-  mode: "sdk",
-  cloud_provider: "gcp", // default
-  public_host: "",
-};
+import { useState, useEffect } from "react";
 
 export default function Config() {
-  const [config, setConfig] = useState(defaultConfig);
+  const [config, setConfig] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(setConfig)
+      .catch((err) => setLoadError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
 
   const handleChange = (field, value) => {
     setConfig((prev) => ({ ...prev, [field]: value }));
+    setSaved(false);
+    setSaveError(null);
   };
 
-  const handleSave = () => {
-    // wired to POST /api/config on Day 5 — no-op for now
-    console.log("save requested", config);
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError(null);
+    setSaved(false);
+    try {
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text.trim() || `HTTP ${res.status}`);
+      }
+      setSaved(true);
+    } catch (err) {
+      setSaveError(err.message);
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return <div style={styles.container}>Loading configuration…</div>;
+  }
+  if (loadError) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.error}>Could not load config: {loadError}</div>
+      </div>
+    );
+  }
+
+  const errors = saveError ? saveError.split("; ") : [];
 
   return (
     <div style={styles.container}>
@@ -98,7 +129,9 @@ export default function Config() {
             type="number"
             style={styles.input}
             value={config.heartbeat_timeout_seconds}
-            onChange={(e) => handleChange("heartbeat_timeout_seconds", Number(e.target.value))}
+            onChange={(e) =>
+              handleChange("heartbeat_timeout_seconds", Number(e.target.value))
+            }
           />
         </Field>
       </div>
@@ -147,17 +180,43 @@ export default function Config() {
         <Field label="Public Host">
           <input
             style={styles.input}
-            placeholder="e.g. mygameserver.example.com"
+            placeholder="e.g. huginn.example.com"
             value={config.public_host}
             onChange={(e) => handleChange("public_host", e.target.value)}
           />
         </Field>
       )}
 
-      <button style={styles.saveButton} onClick={handleSave}>
-        Save Configuration
+      {errors.length > 0 && (
+        <div style={styles.error}>
+          {errors.length === 1 ? (
+            errors[0]
+          ) : (
+            <ul style={styles.errorList}>
+              {errors.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {saved && (
+        <div style={styles.success}>
+          Saved — restart Huginn for changes to take effect.
+        </div>
+      )}
+
+      <button
+        style={{
+          ...styles.saveButton,
+          ...(saving ? styles.buttonDisabled : {}),
+        }}
+        disabled={saving}
+        onClick={handleSave}
+      >
+        {saving ? "Saving…" : "Save Configuration"}
       </button>
-      <p style={styles.note}>Changes take effect after restarting Huginn.</p>
     </div>
   );
 }
@@ -192,15 +251,39 @@ const styles = {
     borderRadius: "6px",
     color: "#fff",
     boxSizing: "border-box",
+    colorScheme: "dark",
+    fontFamily: "inherit",
+    fontSize: "13px",
   },
   saveButton: {
     background: "#238636",
     color: "#fff",
     border: "none",
-    padding: "10px 20px",
+    padding: "8px 16px",
     borderRadius: "6px",
     cursor: "pointer",
-    marginTop: "8px",
+    fontSize: "13px",
+    fontWeight: 500,
+    fontFamily: "inherit",
   },
-  note: { fontSize: "13px", color: "#6b7280", marginTop: "8px" },
+  buttonDisabled: { opacity: 0.5, cursor: "not-allowed" },
+  error: {
+    color: "#fca5a5",
+    background: "rgba(220, 38, 38, 0.12)",
+    border: "1px solid rgba(220, 38, 38, 0.35)",
+    padding: "10px 14px",
+    borderRadius: "6px",
+    marginBottom: "16px",
+    fontSize: "13px",
+  },
+  errorList: { margin: 0, paddingLeft: "18px" },
+  success: {
+    color: "#86efac",
+    background: "rgba(34, 197, 94, 0.12)",
+    border: "1px solid rgba(34, 197, 94, 0.35)",
+    padding: "10px 14px",
+    borderRadius: "6px",
+    marginBottom: "16px",
+    fontSize: "13px",
+  },
 };
