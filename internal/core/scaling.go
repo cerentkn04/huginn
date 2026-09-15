@@ -8,16 +8,17 @@ import (
 	"time"
 )
 
-func RunScalingLoop(ctx context.Context, cli *client.Client, cfg Config, reg *Registry) error {
+func RunScalingLoop(ctx context.Context, cli *client.Client, store *ConfigStore, reg *Registry) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	nextIndex := cfg.MinInstances
+	nextIndex := store.Get().MinInstances
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			cfg := store.Get()
 			available := 0
 			total := 0
 			for _, inst := range reg.All() {

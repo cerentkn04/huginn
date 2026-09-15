@@ -7,8 +7,7 @@ import (
 	"time"
 )
 
-func RunScaleDown(ctx context.Context, cli *client.Client, cfg Config, reg *Registry) error {
-
+func RunScaleDown(ctx context.Context, cli *client.Client, store *ConfigStore, reg *Registry) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -16,6 +15,7 @@ func RunScaleDown(ctx context.Context, cli *client.Client, cfg Config, reg *Regi
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			cfg := store.Get()
 			found := false
 			var draining Instance
 			for _, inst := range reg.All() {
@@ -58,9 +58,6 @@ func RunScaleDown(ctx context.Context, cli *client.Client, cfg Config, reg *Regi
 					break
 				}
 			}
-
 		}
-
 	}
-
 }

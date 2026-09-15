@@ -19,7 +19,7 @@ type summary struct {
 	TotalPlayer    int
 }
 
-func NewRestServer(ctx context.Context, cli *client.Client, cfg Config, reg *Registry) *http.Server {
+func NewRestServer(ctx context.Context, cli *client.Client, store *ConfigStore, reg *Registry) *http.Server {
 	mux := http.NewServeMux()
 	ApiAvailable(mux, reg)
 	ApiFleet(mux, reg)
@@ -27,11 +27,11 @@ func NewRestServer(ctx context.Context, cli *client.Client, cfg Config, reg *Reg
 	ApiStop(mux, ctx, cli, reg)
 	ApiFleetStream(mux, reg)
 	ApiServers(mux, reg)
-	ApiConfig(mux, cfg)
+	ApiConfig(mux, store, reg)
 	if err := ServeDashboard(mux); err != nil {
 		log.Printf("huginn: dashboard unavailable: %v", err)
 	}
-	return &http.Server{Addr: cfg.HTTPListenAddr, Handler: mux}
+	return &http.Server{Addr: store.Get().HTTPListenAddr, Handler: mux}
 }
 func ApiAvailable(mux *http.ServeMux, reg *Registry) {
 	mux.HandleFunc("/api/servers/available", func(w http.ResponseWriter, r *http.Request) {
@@ -160,14 +160,14 @@ func ServeDashboard(mux *http.ServeMux) error {
 	mux.Handle("/", http.FileServer(http.FS(dist)))
 	return nil
 }
-func ApiConfig(mux *http.ServeMux, cfg Config) {
+func ApiConfig(mux *http.ServeMux, store *ConfigStore, reg *Registry) {
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			json.NewEncoder(w).Encode(cfg)
+			json.NewEncoder(w).Encode(store.Get())
 
 		case http.MethodPost:
-			newCfg := cfg
+			newCfg := store.Get()
 			if err := json.NewDecoder(r.Body).Decode(&newCfg); err != nil {
 				log.Printf("huginn: api: bad config payload: %v", err)
 				http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -177,13 +177,15 @@ func ApiConfig(mux *http.ServeMux, cfg Config) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			if err := writeConfig(cfg.path, newCfg); err != nil {
+			if err := writeConfig(newCfg.path, newCfg); err != nil {
 				log.Printf("huginn: api: failed to write config: %v", err)
 				http.Error(w, "failed to save config", http.StatusInternalServerError)
 				return
 			}
+			store.Set(newCfg)
+			reg.SetHeartbeatTimeout(time.Duration(newCfg.HeartbeatTimeout) * time.Second)
 			go EnsureFirewall(context.Background(), newCfg)
-			log.Printf("huginn: api: config saved to %s (restart required to apply)", cfg.path)
+			log.Printf("huginn: api: config saved to %s", newCfg.path)
 			json.NewEncoder(w).Encode(newCfg)
 
 		default:

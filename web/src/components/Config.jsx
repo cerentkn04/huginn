@@ -203,7 +203,7 @@ export default function Config() {
 
       {saved && (
         <div style={styles.success}>
-          Saved — restart Huginn for changes to take effect.
+          Saved — applied immediately. (Image and listen addresses still need a restart.)
         </div>
       )}
 

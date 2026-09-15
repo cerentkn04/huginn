@@ -58,6 +58,8 @@ func main() {
 		log.Println("huginn: WARNING: ...")
 	}
 
+	store := core.NewConfigStore(cfg)
+
 	for i := 0; i < cfg.MinInstances; i++ {
 		instanceID := fmt.Sprintf("huginn-inst-%d", i)
 		hostPort := cfg.GamePort + i // each instance needs its own host port; container port is always cfg.GamePort
@@ -78,19 +80,19 @@ func main() {
 
 	log.Printf("huginn: %d instance(s) running, heartbeats on %s", cfg.MinInstances, cfg.UDPListenAddr)
 	go func() {
-		srv := core.NewRestServer(ctx, cli, cfg, reg)
+		srv := core.NewRestServer(ctx, cli, store, reg)
 		if err := srv.ListenAndServe(); err != nil {
 			log.Printf("huginn: REST API server failed: %v", err)
 		}
 	}()
 	go core.EnsureFirewall(ctx, cfg)
 	go func() {
-		if err := core.RunScalingLoop(ctx, cli, cfg, reg); err != nil && ctx.Err() == nil {
+		if err := core.RunScalingLoop(ctx, cli, store, reg); err != nil && ctx.Err() == nil {
 			log.Printf("huginn: scaling loop failed: %v", err)
 		}
 	}()
 	go func() {
-		if err := core.RunScaleDown(ctx, cli, cfg, reg); err != nil && ctx.Err() == nil {
+		if err := core.RunScaleDown(ctx, cli, store, reg); err != nil && ctx.Err() == nil {
 			log.Printf("huginn: scale-down loop failed: %v", err)
 		}
 	}()

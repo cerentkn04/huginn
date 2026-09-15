@@ -56,6 +56,12 @@ func NewRegistry(heartbeatTimeout time.Duration) *Registry {
 		timeout:   heartbeatTimeout,
 	}
 }
+func (r *Registry) SetHeartbeatTimeout(d time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.timeout = d
+}
+
 func (r *Registry) Register(id, containerID, address string, maxPlayers int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
