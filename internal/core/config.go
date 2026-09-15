@@ -22,6 +22,7 @@ type Config struct {
 	Mode             string `yaml:"mode" json:"mode"`
 	PublicHost       string `yaml:"public_host" json:"public_host"`
 	CloudProvider    string `yaml:"cloud_provider" json:"cloud_provider"`
+	FirewallManage   bool   `yaml:"firewall_manage" json:"firewall_manage"`
 
 	path string // where this was loaded from; unexported so it never serializes
 }
@@ -36,6 +37,7 @@ func LoadConfig(path string) (Config, error) {
 		HTTPListenAddr:   ":8080",
 		HeartbeatTimeout: 15,
 		CloudProvider:    "gcp",
+		FirewallManage:   true,
 	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parsing config: %w", err)

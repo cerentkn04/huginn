@@ -83,7 +83,7 @@ func main() {
 			log.Printf("huginn: REST API server failed: %v", err)
 		}
 	}()
-
+	go core.EnsureFirewall(ctx, cfg)
 	go func() {
 		if err := core.RunScalingLoop(ctx, cli, cfg, reg); err != nil && ctx.Err() == nil {
 			log.Printf("huginn: scaling loop failed: %v", err)
@@ -94,6 +94,7 @@ func main() {
 			log.Printf("huginn: scale-down loop failed: %v", err)
 		}
 	}()
+	go core.RunReclaimLoop(ctx, cli, reg, 10*time.Second)
 	<-ctx.Done()
 
 	log.Println("huginn: shutting down")

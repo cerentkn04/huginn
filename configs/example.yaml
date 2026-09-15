@@ -11,3 +11,4 @@ heartbeat_timeout_seconds: 15
 mode: sdk
 public_host: 136.115.141.26
 cloud_provider: gcp
+firewall_manage: true

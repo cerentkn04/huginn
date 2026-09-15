@@ -167,7 +167,7 @@ func ApiConfig(mux *http.ServeMux, cfg Config) {
 			json.NewEncoder(w).Encode(cfg)
 
 		case http.MethodPost:
-			var newCfg Config
+			newCfg := cfg
 			if err := json.NewDecoder(r.Body).Decode(&newCfg); err != nil {
 				log.Printf("huginn: api: bad config payload: %v", err)
 				http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -182,6 +182,7 @@ func ApiConfig(mux *http.ServeMux, cfg Config) {
 				http.Error(w, "failed to save config", http.StatusInternalServerError)
 				return
 			}
+			go EnsureFirewall(context.Background(), newCfg)
 			log.Printf("huginn: api: config saved to %s (restart required to apply)", cfg.path)
 			json.NewEncoder(w).Encode(newCfg)
 
