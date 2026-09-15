@@ -98,4 +98,5 @@ func main() {
 	<-ctx.Done()
 
 	log.Println("huginn: shutting down")
+	core.ShutdownAll(cli, reg, 30*time.Second)
 }
