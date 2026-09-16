@@ -35,8 +35,10 @@ export default function Fleet({ instances, loaded }) {
   const [confirmingStop, setConfirmingStop] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [stopError, setStopError] = useState(null);
+  const [detailTab, setDetailTab] = useState("details");
   const [logs, setLogs] = useState("");
-
+const [restarting, setRestarting] = useState(false);
+const [restartError, setRestartError] = useState(null); 
   const totalInstances = instances.length;
   const totalPlayers = instances.reduce((sum, i) => sum + i.PlayerCount, 0);
   const available = instances.filter(
@@ -68,11 +70,12 @@ export default function Fleet({ instances, loaded }) {
       .catch(() => {});
 
     return () => controller.abort();
-  }, [selected?.ID]);
+  },  [selected?.ID, detailTab]);
 
   useEffect(() => {
     setConfirmingStop(false);
     setStopError(null);
+     setDetailTab("details");
   }, [selectedId]);
 
   const handleStop = async (id) => {
@@ -92,7 +95,21 @@ export default function Fleet({ instances, loaded }) {
       setStopping(false);
     }
   };
-
+const handleRestart = async (id) => {
+  setRestarting(true);
+  setRestartError(null);
+  try {
+    const res = await fetch(`/api/servers/restart/${id}`, { method: "POST" });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text.trim() || `HTTP ${res.status}`);
+    }
+  } catch (err) {
+    setRestartError(err.message);
+  } finally {
+    setRestarting(false);
+  }
+};
   return (
     <div style={styles.container}>
       <div style={styles.summaryRow}>
@@ -153,47 +170,84 @@ export default function Fleet({ instances, loaded }) {
                   {selected.State}
                 </span>
               </div>
+              <div style={styles.tabRow}>
+  <button
+    style={{ ...styles.tabButton, ...(detailTab === "details" ? styles.tabButtonActive : {}) }}
+    onClick={() => setDetailTab("details")}
+  >
+    Details
+  </button>
+  <button
+    style={{ ...styles.tabButton, ...(detailTab === "logs" ? styles.tabButtonActive : {}) }}
+    onClick={() => setDetailTab("logs")}
+  >
+    Logs
+  </button>
+</div>
 
-              <div style={styles.capacityBlock}>
-                <div style={styles.capacityLabel}>
-                  Capacity: {selected.PlayerCount}/{selected.MaxPlayers}
-                </div>
-                <div style={styles.barTrack}>
-                  <div
-                    style={{
-                      ...styles.barFill,
-                      width: `${(selected.PlayerCount / selected.MaxPlayers) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
 
-              <div style={styles.fieldGrid}>
-                <Field label="Container" value={selected.ContainerID.slice(0, 12)} />
-                <Field
-                  label="Address"
-                  value={selected.Address}
-                  onCopy={() => navigator.clipboard.writeText(selected.Address)}
-                />
-                <Field
-                  label="Join Code"
-                  value={selected.JoinCode}
-                  onCopy={() => navigator.clipboard.writeText(selected.JoinCode)}
-                />
-                <Field label="Last Heartbeat" value={selected.LastHeartbeat} />
-                 
-              </div>
-             <pre style={styles.logPane}>{logs}</pre>
+
+              
+{detailTab === "details" ? (
+  <>
+    <div style={styles.capacityBlock}>
+      <div style={styles.capacityLabel}>
+        Capacity: {selected.PlayerCount}/{selected.MaxPlayers}
+      </div>
+      <div style={styles.barTrack}>
+        <div
+          style={{
+            ...styles.barFill,
+            width: `${(selected.PlayerCount / selected.MaxPlayers) * 100}%`,
+          }}
+        />
+      </div>
+    </div>
+    <div style={styles.fieldGrid}>
+      <Field label="Container" value={selected.ContainerID.slice(0, 12)} />
+      <Field
+        label="Address"
+        value={selected.Address}
+        onCopy={() => navigator.clipboard.writeText(selected.Address)}
+      />
+      <Field
+        label="Join Code"
+        value={selected.JoinCode}
+        onCopy={() => navigator.clipboard.writeText(selected.JoinCode)}
+      />
+      <Field label="Last Heartbeat" value={selected.LastHeartbeat} />
+    </div>
+  </>
+) : (
+  <pre style={styles.logPane}>{logs}</pre>
+)}
 
               {stopError && <div style={styles.error}>{stopError}</div>}
+              {restartError && <div style={styles.error}>{restartError}</div>}
 
               {!confirmingStop ? (
-                <button
-                  style={{ ...styles.button, ...styles.dangerButton, marginTop: "16px" }}
-                  onClick={() => setConfirmingStop(true)}
-                >
-                  Stop Instance
-                </button>
+
+                <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
+                  <button
+                    style={{
+                      ...styles.button,
+                      ...styles.secondaryButton,
+                      ...(restarting ? styles.buttonDisabled : {}),
+                    }}
+                    disabled={restarting}
+                    onClick={() => handleRestart(selected.ID)}
+                  >
+                    {restarting ? "Restarting…" : "Restart Instance"}
+                  </button>
+                  <button
+                    style={{ ...styles.button, ...styles.dangerButton }}
+                    onClick={() => setConfirmingStop(true)}
+                  >
+                    Stop Instance
+                  </button>
+                </div>
+                              
+                              
               ) : (
                 <div style={styles.confirmBox}>
                   <div style={styles.confirmText}>
@@ -298,6 +352,18 @@ const styles = {
     fontWeight: "bold",
     color: "#0d1117",
   },
+  tabRow: { display: "flex", gap: "4px", marginTop: "16px", borderBottom: "1px solid #30363d" },
+tabButton: {
+  background: "transparent",
+  border: "none",
+  color: "#9ca3af",
+  padding: "8px 14px",
+  cursor: "pointer",
+  fontSize: "13px",
+  fontFamily: "inherit",
+  borderBottom: "2px solid transparent",
+},
+tabButtonActive: { color: "#fff", borderBottom: "2px solid #4ade80" },
   capacityBlock: { margin: "16px 0" },
   capacityLabel: { fontSize: "13px", color: "#9ca3af", marginBottom: "4px" },
   barTrack: {
