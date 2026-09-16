@@ -26,9 +26,12 @@ type Instance struct {
 	LastHeartbeat time.Time
 	JoinCode      string
 	Address       string
-	PlayerHistory []int
+	PlayerHistory []PlayerSample
 }
-
+type PlayerSample struct {
+	Time  int64 `json:"t"` // unix seconds
+	Count int   `json:"c"`
+}
 func generateJoinCode() string {
 	b := make([]byte, 2)
 	rand.Read(b)
@@ -89,8 +92,8 @@ func (r *Registry) Heartbeat(id string, playerCount int) {
 	if inst.State != StateDraining {
 		inst.State = StateReady
 	}
-	inst.PlayerHistory = append(inst.PlayerHistory, playerCount)
-	const maxHistory = 30
+	inst.PlayerHistory = append(inst.PlayerHistory, PlayerSample{Time: time.Now().Unix(), Count: playerCount})
+	const maxHistory = 900
 	if len(inst.PlayerHistory) > maxHistory {
 		inst.PlayerHistory = inst.PlayerHistory[len(inst.PlayerHistory)-maxHistory:]
 	}

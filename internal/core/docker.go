@@ -8,6 +8,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"io"
+	"strings"
 	"net"
 )
 
@@ -19,21 +20,7 @@ func NewDockerClient() (*client.Client, error) {
 	return cli, nil
 }
 
-func PullImage(ctx context.Context, cli *client.Client, imageName string) error {
-	if _, _, err := cli.ImageInspectWithRaw(ctx, imageName); err == nil {
-		return nil 
-	}
 
-	reader, err := cli.ImagePull(ctx, imageName, types.ImagePullOptions{})
-	if err != nil {
-		return fmt.Errorf("docker: pulling %s: %w", imageName, err)
-	}
-	defer reader.Close()
-	if _, err := io.Copy(io.Discard, reader); err != nil {
-		return fmt.Errorf("docker: reading pull progress for %s: %w", imageName, err)
-	}
-	return nil
-}
 func StartInstance(ctx context.Context, cli *client.Client, cfg Config, instanceID string, hostPort int) (containerID string, err error) {
 	containerPort, err := nat.NewPort("udp", fmt.Sprintf("%d", cfg.GamePort))
 	if err != nil {
@@ -86,4 +73,43 @@ func StopInstance(ctx context.Context, cli *client.Client, containerID string) e
 		return fmt.Errorf("docker: removing container %s: %w", containerID, err)
 	}
 	return nil
+}
+func PullImage(ctx context.Context, cli *client.Client, imageName string) error {
+	if _, _, err := cli.ImageInspectWithRaw(ctx, imageName); err == nil {
+		return nil
+	}
+
+	reader, err := cli.ImagePull(ctx, imageName, types.ImagePullOptions{})
+	if err != nil {
+		return friendlyPullError(imageName, err)
+	}
+	defer reader.Close()
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		return friendlyPullError(imageName, err)
+	}
+	return nil
+}
+
+func friendlyPullError(imageName string, err error) error {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "pull access denied"), strings.Contains(msg, "repository does not exist"):
+		return fmt.Errorf(
+			"could not find image %q — check the spelling in your config's `image` field, "+
+				"or if it's a private image, run `docker login` first (original error: %w)",
+			imageName, err,
+		)
+	case strings.Contains(msg, "manifest unknown"), strings.Contains(msg, "not found"):
+		return fmt.Errorf(
+			"image %q was found but the tag doesn't exist — check the tag (e.g. \":latest\") is correct (original error: %w)",
+			imageName, err,
+		)
+	case strings.Contains(msg, "Cannot connect to the Docker daemon"):
+		return fmt.Errorf(
+			"could not reach Docker — is the Docker daemon running? (original error: %w)",
+			err,
+		)
+	default:
+		return fmt.Errorf("failed to pull image %q: %w", imageName, err)
+	}
 }
