@@ -35,44 +35,45 @@ export default function Fleet({ instances, loaded }) {
   const [confirmingStop, setConfirmingStop] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [stopError, setStopError] = useState(null);
+  const [logs, setLogs] = useState("");
 
   const totalInstances = instances.length;
   const totalPlayers = instances.reduce((sum, i) => sum + i.PlayerCount, 0);
   const available = instances.filter(
     (i) => i.State === "ready" && i.PlayerCount < i.MaxPlayers
   ).length;
-const [logs, setLogs] = useState("");
 
-useEffect(() => {
-  if (!selected) return;
-  setLogs("");
-  const controller = new AbortController();
+  const selected = instances.find((i) => i.ID === selectedId) || null;  // ← moved up
 
-  fetch(`/api/servers/logs/${selected.JoinCode}`, { signal: controller.signal })
-    .then((res) => {
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      function read() {
-  reader.read()
-    .then(({ done, value }) => {
-      if (done) return;
-      setLogs((prev) => prev + decoder.decode(value));
-      read();
-    })
-    .catch(() => {}); // swallow abort errors from switching/unmounting
-}
- read(); 
-    })
-    .catch(() => {}); // aborted on cleanup, ignore
+  useEffect(() => {
+    if (!selected) return;
+    setLogs("");
+    const controller = new AbortController();
 
-  return () => controller.abort();
-}, [selected?.ID]);
+    fetch(`/api/servers/logs/${selected.JoinCode}`, { signal: controller.signal })
+      .then((res) => {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        function read() {
+          reader.read()
+            .then(({ done, value }) => {
+              if (done) return;
+              setLogs((prev) => prev + decoder.decode(value));
+              read();
+            })
+            .catch(() => {});
+        }
+        read();
+      })
+      .catch(() => {});
+
+    return () => controller.abort();
+  }, [selected?.ID]);
+
   useEffect(() => {
     setConfirmingStop(false);
     setStopError(null);
   }, [selectedId]);
-
-  const selected = instances.find((i) => i.ID === selectedId) || null;
 
   const handleStop = async (id) => {
     setStopping(true);
