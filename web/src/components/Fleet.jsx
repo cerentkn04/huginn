@@ -1,5 +1,55 @@
 import { useState, useEffect } from "react";
+import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
 
+function HistoryChart({ data }) {
+  const containerRef = useRef(null);
+  const plotRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    if (!data || data.length < 2) return;
+
+    const times = data.map((s) => s.t);
+    const counts = data.map((s) => s.c);
+
+    if (plotRef.current) {
+      plotRef.current.setData([times, counts]);
+      return;
+    }
+
+    const opts = {
+      width: 600,
+      height: 220,
+      scales: { x: { time: true } },
+      series: [
+        {},
+        {
+          label: "Players",
+          stroke: "#4ade80",
+          width: 2,
+        },
+      ],
+      axes: [
+        { stroke: "#9ca3af", grid: { stroke: "#30363d" } },
+        { stroke: "#9ca3af", grid: { stroke: "#30363d" } },
+      ],
+    };
+
+    plotRef.current = new uPlot(opts, [times, counts], containerRef.current);
+
+    return () => {
+      plotRef.current?.destroy();
+      plotRef.current = null;
+    };
+  }, [data]);
+
+  if (!data || data.length < 2) {
+    return <div style={styles.sparklineEmpty}>Not enough data yet</div>;
+  }
+
+  return <div ref={containerRef} />;
+}
 const stateColors = {
   ready: "#4ade80",
   starting: "#facc15",
