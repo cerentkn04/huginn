@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
@@ -47,7 +47,7 @@ function HistoryChart({ data }) {
   if (!data || data.length < 2) {
     return <div style={styles.sparklineEmpty}>Not enough data yet</div>;
   }
-
+  console.log("HistoryChart data:", data);
   return <div ref={containerRef} />;
 }
 const stateColors = {
@@ -63,27 +63,7 @@ function timeAgo(isoString) {
   const minutes = Math.floor(seconds / 60);
   return `${minutes}m ago`;
 }
-function Sparkline({ data, max }) {
-  if (!data || data.length < 2) {
-    return <div style={styles.sparklineEmpty}>Not enough data yet</div>;
-  }
-  const w = 400;
-  const h = 120;
-  const stepX = w / (data.length - 1);
-  const points = data
-    .map((v, i) => {
-      const x = i * stepX;
-      const y = h - (v / max) * h;
-      return `${x},${y}`;
-    })
-    .join(" ");
 
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={styles.sparklineSvg}>
-      <polyline points={points} fill="none" stroke="#4ade80" strokeWidth="2" />
-    </svg>
-  );
-}
 function Field({ label, value, onCopy }) {
   return (
     <div style={styles.field}>
@@ -119,6 +99,8 @@ const [restartError, setRestartError] = useState(null);
 
   useEffect(() => {
     if (!selected) return;
+    
+
     setLogs("");
     const controller = new AbortController();
 
@@ -146,6 +128,7 @@ const [restartError, setRestartError] = useState(null);
     setConfirmingStop(false);
     setStopError(null);
      setDetailTab("details");
+     
   }, [selectedId]);
 
   const handleStop = async (id) => {
@@ -351,12 +334,12 @@ const handleRestart = async (id) => {
             </div>
           )}
         </div>
-             {selected && (
-          <div style={styles.historyPane}>
-            <h4 style={styles.historyTitle}>Player History</h4>
-            <Sparkline data={selected.PlayerHistory} max={selected.MaxPlayers} />
-          </div>
-        )}
+{selected && (
+  <div style={styles.historyPane}>
+    <h4 style={styles.historyTitle}>Player History</h4>
+    <HistoryChart data={selected.PlayerHistory} />
+  </div>
+)}
       </div>
     </div>
   );
@@ -471,7 +454,6 @@ tabButtonActive: { color: "#fff", borderBottom: "2px solid #4ade80" },
     minHeight: "300px",
   },
   historyTitle: { marginTop: 0, marginBottom: "16px", fontSize: "14px", color: "#9ca3af" },
-  sparklineSvg: { width: "100%", height: "160px" },
   sparklineEmpty: { color: "#6b7280", fontStyle: "italic", marginTop: "16px", fontSize: "13px" },
   fieldValueRow: { display: "flex", alignItems: "center", gap: "8px" },
   fieldValue: { color: "#fff", fontSize: "14px" },
