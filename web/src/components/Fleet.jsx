@@ -18,17 +18,15 @@ function HistoryChart({ data }) {
       return;
     }
 
+    const rect = containerRef.current.getBoundingClientRect();
+
     const opts = {
-      width: 600,
+      width: rect.width,
       height: 220,
       scales: { x: { time: true } },
       series: [
         {},
-        {
-          label: "Players",
-          stroke: "#4ade80",
-          width: 2,
-        },
+        { label: "Players", stroke: "#4ade80", width: 2 },
       ],
       axes: [
         { stroke: "#9ca3af", grid: { stroke: "#30363d" } },
@@ -47,9 +45,9 @@ function HistoryChart({ data }) {
   if (!data || data.length < 2) {
     return <div style={styles.sparklineEmpty}>Not enough data yet</div>;
   }
-  console.log("HistoryChart data:", data);
   return <div ref={containerRef} />;
 }
+
 const stateColors = {
   ready: "#4ade80",
   starting: "#facc15",
