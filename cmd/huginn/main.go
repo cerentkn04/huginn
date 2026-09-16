@@ -47,6 +47,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("huginn: %v", err)
 	}
+
 	defer cli.Close()
 
 	log.Printf("huginn: pulling image %s", cfg.Image)
@@ -59,25 +60,43 @@ func main() {
 	}
 
 	store := core.NewConfigStore(cfg)
+discovered, err := core.DiscoverInstances(ctx, cli)
+if err != nil {
+	log.Fatalf("huginn: failed to discover existing containers: %v", err)
+}
 
-	for i := 0; i < cfg.MinInstances; i++ {
-		instanceID := fmt.Sprintf("huginn-inst-%d", i)
-		hostPort := cfg.GamePort + i // each instance needs its own host port; container port is always cfg.GamePort
-		containerID, err := core.StartInstance(ctx, cli, cfg, instanceID, hostPort)
-		if err != nil {
-			log.Printf("huginn: instance %s failed to start: %v — rolling back", instanceID, err)
-			for _, inst := range reg.All() {
-				if stopErr := core.StopInstance(ctx, cli, inst.ContainerID); stopErr != nil {
-					log.Printf("huginn: rollback: failed to stop %s: %v", inst.ID, stopErr)
-				}
-			}
-			os.Exit(1)
-		}
-		address := fmt.Sprintf("%s:%d", cfg.PublicHost, hostPort)
-		reg.Register(instanceID, containerID, address, cfg.MaxPlayers)
-		log.Printf("huginn: started instance %s on host port %d (container %s)", instanceID, hostPort, containerID[:12])
+adopted := make(map[string]bool)
+for _, c := range discovered {
+	id, containerID, address, ok := core.InstanceFromContainer(c, cfg, cfg.PublicHost)
+	if !ok {
+		continue
 	}
+	reg.Register(id, containerID, address, cfg.MaxPlayers)
+	adopted[id] = true
+	log.Printf("huginn: adopted existing instance %s (container %s)", id, containerID[:12])
+}
 
+for i := 0; i < cfg.MinInstances; i++ {
+	instanceID := fmt.Sprintf("huginn-inst-%d", i)
+	if adopted[instanceID] {
+		continue
+	}
+	hostPort := cfg.GamePort + i
+	containerID, err := core.StartInstance(ctx, cli, cfg, instanceID, hostPort)
+	if err != nil {
+		log.Printf("huginn: instance %s failed to start: %v — rolling back", instanceID, err)
+		for _, inst := range reg.All() {
+			if stopErr := core.StopInstance(ctx, cli, inst.ContainerID); stopErr != nil {
+				log.Printf("huginn: rollback: failed to stop %s: %v", inst.ID, stopErr)
+			}
+		}
+		os.Exit(1)
+	}
+	address := fmt.Sprintf("%s:%d", cfg.PublicHost, hostPort)
+	reg.Register(instanceID, containerID, address, cfg.MaxPlayers)
+	log.Printf("huginn: started instance %s on host port %d (container %s)", instanceID, hostPort, containerID[:12])
+}
+		
 	log.Printf("huginn: %d instance(s) running, heartbeats on %s", cfg.MinInstances, cfg.UDPListenAddr)
 	go func() {
 		srv := core.NewRestServer(ctx, cli, store, reg)

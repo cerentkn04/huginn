@@ -1,19 +1,20 @@
 package core
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"github.com/docker/docker/client"
-	"github.com/goccy/go-yaml"
-	"huginn/internal/web"
-	"io/fs"
-	"log"
-	"net/http"
-	"os"
-	"time"
+        "context"
+        "encoding/json"
+        "fmt"
+        "github.com/docker/docker/client"
+        "github.com/goccy/go-yaml"
+        "huginn/internal/web"
+        "io/fs"
+        "log"
+        "net"
+        "net/http"
+        "strconv"
+        "os"
+        "time"
 )
-
 type summary struct {
 	TotalInstances int
 	TotalPlayer    int
@@ -25,8 +26,10 @@ func NewRestServer(ctx context.Context, cli *client.Client, store *ConfigStore, 
 	ApiFleet(mux, reg)
 	ApiCode(mux, reg)
 	ApiStop(mux, ctx, cli, reg)
+	ApiRestart(mux, ctx, cli, store, reg)
 	ApiFleetStream(mux, reg)
 	ApiServers(mux, reg)
+	LogFleetStream(mux, reg, cli)
 	ApiConfig(mux, store, reg)
 	if err := ServeDashboard(mux); err != nil {
 		log.Printf("huginn: dashboard unavailable: %v", err)
@@ -136,7 +139,57 @@ func ApiStop(mux *http.ServeMux, ctx context.Context, cli *client.Client, reg *R
 	})
 
 }
+func ApiRestart(mux *http.ServeMux, ctx context.Context, cli *client.Client, store *ConfigStore, reg *Registry) {
+	mux.HandleFunc("/api/servers/restart/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := r.URL.Path[len("/api/servers/restart/"):]
+		if id == "" {
+			http.Error(w, "missing id", http.StatusBadRequest)
+			return
+		}
+		inst, ok := reg.Get(id)
+		if !ok {
+			http.Error(w, "server not found", http.StatusNotFound)
+			return
+		}
 
+		_, portStr, err := net.SplitHostPort(inst.Address)
+		if err != nil {
+			log.Printf("huginn: api: restart: bad address %q for %s: %v", inst.Address, inst.ID, err)
+			http.Error(w, "failed to restart server", http.StatusInternalServerError)
+			return
+		}
+		hostPort, err := strconv.Atoi(portStr)
+		if err != nil {
+			log.Printf("huginn: api: restart: bad port %q for %s: %v", portStr, inst.ID, err)
+			http.Error(w, "failed to restart server", http.StatusInternalServerError)
+			return
+		}
+
+		if err := StopInstance(ctx, cli, inst.ContainerID); err != nil {
+			log.Printf("huginn: api: restart: failed to stop old container for %s: %v", inst.ID, err)
+			http.Error(w, "failed to restart server", http.StatusInternalServerError)
+			return
+		}
+		reg.Remove(inst.ID)
+
+		cfg := store.Get()
+		containerID, err := StartInstance(ctx, cli, cfg, inst.ID, hostPort)
+		if err != nil {
+			log.Printf("huginn: api: restart: failed to start new container for %s: %v", inst.ID, err)
+			http.Error(w, "failed to restart server", http.StatusInternalServerError)
+			return
+		}
+		reg.Register(inst.ID, containerID, inst.Address, inst.MaxPlayers)
+
+		newInst, _ := reg.Get(inst.ID)
+		log.Printf("huginn: api: restarted instance %s via REST", inst.ID)
+		json.NewEncoder(w).Encode(newInst)
+	})
+}
 func ApiCode(mux *http.ServeMux, reg *Registry) {
 	mux.HandleFunc("/api/servers/code/", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Path[len("/api/servers/code/"):]

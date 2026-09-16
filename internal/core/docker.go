@@ -21,7 +21,7 @@ func NewDockerClient() (*client.Client, error) {
 
 func PullImage(ctx context.Context, cli *client.Client, imageName string) error {
 	if _, _, err := cli.ImageInspectWithRaw(ctx, imageName); err == nil {
-		return nil // already present locally
+		return nil 
 	}
 
 	reader, err := cli.ImagePull(ctx, imageName, types.ImagePullOptions{})
@@ -53,6 +53,10 @@ func StartInstance(ctx context.Context, cli *client.Client, cfg Config, instance
 			"SIDECAR_MODE=" + cfg.Mode,
 		},
 		ExposedPorts: nat.PortSet{containerPort: struct{}{}},
+		Labels: map[string]string{
+        		"huginn.managed":     "true",
+        		"huginn.instance_id": instanceID,
+   		},
 	}
 
 	hostCfg := &container.HostConfig{
