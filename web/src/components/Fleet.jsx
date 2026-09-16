@@ -41,7 +41,32 @@ export default function Fleet({ instances, loaded }) {
   const available = instances.filter(
     (i) => i.State === "ready" && i.PlayerCount < i.MaxPlayers
   ).length;
+const [logs, setLogs] = useState("");
 
+useEffect(() => {
+  if (!selected) return;
+  setLogs("");
+  const controller = new AbortController();
+
+  fetch(`/api/servers/logs/${selected.JoinCode}`, { signal: controller.signal })
+    .then((res) => {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      function read() {
+  reader.read()
+    .then(({ done, value }) => {
+      if (done) return;
+      setLogs((prev) => prev + decoder.decode(value));
+      read();
+    })
+    .catch(() => {}); // swallow abort errors from switching/unmounting
+}
+ read(); 
+    })
+    .catch(() => {}); // aborted on cleanup, ignore
+
+  return () => controller.abort();
+}, [selected?.ID]);
   useEffect(() => {
     setConfirmingStop(false);
     setStopError(null);
@@ -155,7 +180,9 @@ export default function Fleet({ instances, loaded }) {
                   onCopy={() => navigator.clipboard.writeText(selected.JoinCode)}
                 />
                 <Field label="Last Heartbeat" value={selected.LastHeartbeat} />
+                 
               </div>
+             <pre style={styles.logPane}>{logs}</pre>
 
               {stopError && <div style={styles.error}>{stopError}</div>}
 
@@ -337,7 +364,18 @@ const styles = {
     lineHeight: 1.5,
   },
   confirmActions: { display: "flex", gap: "8px" },
-
+logPane: {
+  marginTop: "16px",
+  background: "#0d1117",
+  border: "1px solid #30363d",
+  borderRadius: "6px",
+  padding: "12px",
+  maxHeight: "240px",
+  overflowY: "auto",
+  fontSize: "12px",
+  color: "#9ca3af",
+  whiteSpace: "pre-wrap",
+},
   error: {
     display: "inline-block",
     color: "#fca5a5",
