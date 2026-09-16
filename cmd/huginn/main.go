@@ -12,14 +12,27 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 3 || os.Args[1] != "start" {
-		fmt.Fprintln(os.Stderr, "usage: huginn start <config.yaml>")
+	if len(os.Args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: huginn <init|start> [args]")
+		os.Exit(1)
+	}
+
+	switch os.Args[1] {
+	case "init":
+		runInit()
+		return
+	case "start":
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "usage: huginn start <config.yaml>")
+			os.Exit(1)
+		}
+	default:
+		fmt.Fprintln(os.Stderr, "usage: huginn <init|start> [args]")
 		os.Exit(1)
 	}
 	cfg, err := core.LoadConfig(os.Args[2])
 	if err != nil {
 		log.Fatalf("huginn: %v", err)
-
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
