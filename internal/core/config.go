@@ -21,6 +21,7 @@ type Config struct {
 	HeartbeatTimeout int    `yaml:"heartbeat_timeout_seconds" json:"heartbeat_timeout_seconds"`
 	Mode             string `yaml:"mode" json:"mode"`
 	PublicHost       string `yaml:"public_host" json:"public_host"`
+	InternalHost string `yaml:"-" json:"internal_host"`
 	CloudProvider    string `yaml:"cloud_provider" json:"cloud_provider"`
 	FirewallManage   bool   `yaml:"firewall_manage" json:"firewall_manage"`
 

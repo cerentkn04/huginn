@@ -69,6 +69,10 @@ func main() {
 	if err := core.PullImage(ctx, cli, cfg.Image); err != nil {
 		log.Fatalf("huginn: %v", err)
 	}
+	cfg.InternalHost = core.DiscoverInternalHost(cfg)
+		if cfg.InternalHost == "" {
+		log.Println("huginn: WARNING: could not determine internal host address; sidecar heartbeats may fail")
+	}
 	cfg.PublicHost = core.DiscoverPublicHost(cfg)
 	if cfg.PublicHost == "" {
 		log.Println("huginn: WARNING: ...")

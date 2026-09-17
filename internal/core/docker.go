@@ -36,7 +36,7 @@ func StartInstance(ctx context.Context, cli *client.Client, cfg Config, instance
 		Image: cfg.Image,
 		Env: []string{
 			"SIDECAR_INSTANCE_ID=" + instanceID,
-			"SIDECAR_CORE_UDP_ADDR=host.docker.internal:" + corePort,
+			"SIDECAR_CORE_UDP_ADDR=" + cfg.InternalHost + ":" + corePort,
 			"SIDECAR_MODE=" + cfg.Mode,
 		},
 		ExposedPorts: nat.PortSet{containerPort: struct{}{}},
@@ -50,7 +50,6 @@ func StartInstance(ctx context.Context, cli *client.Client, cfg Config, instance
 		PortBindings: nat.PortMap{
 			containerPort: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", hostPort)}},
 		},
-		ExtraHosts: []string{"host.docker.internal:host-gateway"},
 	}
 
 	created, err := cli.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, instanceID)
