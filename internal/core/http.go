@@ -4,7 +4,6 @@ import (
         "context"
         "encoding/json"
         "fmt"
-        "github.com/docker/docker/client"
         "github.com/goccy/go-yaml"
         "huginn/internal/web"
         "io/fs"
@@ -20,16 +19,16 @@ type summary struct {
 	TotalPlayer    int
 }
 
-func NewRestServer(ctx context.Context, cli *client.Client, store *ConfigStore, reg *Registry) *http.Server {
+func NewRestServer(ctx context.Context, hostPool *HostPool, store *ConfigStore, reg *Registry) *http.Server {
 	mux := http.NewServeMux()
 	ApiAvailable(mux, reg)
 	ApiFleet(mux, reg)
 	ApiCode(mux, reg)
-	ApiStop(mux, ctx, cli, reg)
-	ApiRestart(mux, ctx, cli, store, reg)
+	ApiStop(mux, ctx, hostPool, reg)
+	ApiRestart(mux, ctx, hostPool, store, reg)
 	ApiFleetStream(mux, reg)
 	ApiServers(mux, reg)
-	LogFleetStream(mux, reg, cli)
+	LogFleetStream(mux, reg,hostPool)
 	ApiConfig(mux, store, reg)
 	if err := ServeDashboard(mux); err != nil {
 		log.Printf("huginn: dashboard unavailable: %v", err)
@@ -112,7 +111,7 @@ func ApiServers(mux *http.ServeMux, reg *Registry) {
 	})
 
 }
-func ApiStop(mux *http.ServeMux, ctx context.Context, cli *client.Client, reg *Registry) {
+func ApiStop(mux *http.ServeMux, ctx context.Context, hostPool *HostPool, reg *Registry) {
 	mux.HandleFunc("/api/servers/stop/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -128,6 +127,12 @@ func ApiStop(mux *http.ServeMux, ctx context.Context, cli *client.Client, reg *R
 			http.Error(w, "server not found", http.StatusNotFound)
 			return
 		}
+		cli, err := hostPool.Get(inst.HostID)
+		if err != nil {
+			log.Printf("huginn: api: stop: %v", err)
+			http.Error(w, "host unavailable", http.StatusInternalServerError)
+			return
+		}
 		if err := StopInstance(ctx, cli, inst.ContainerID); err != nil {
 			log.Printf("huginn: api: failed to stop instance %s: %v", inst.ID, err)
 			http.Error(w, "failed to stop server", http.StatusInternalServerError)
@@ -139,7 +144,7 @@ func ApiStop(mux *http.ServeMux, ctx context.Context, cli *client.Client, reg *R
 	})
 
 }
-func ApiRestart(mux *http.ServeMux, ctx context.Context, cli *client.Client, store *ConfigStore, reg *Registry) {
+func ApiRestart(mux *http.ServeMux, ctx context.Context, hostPool *HostPool, store *ConfigStore, reg *Registry) {
 	mux.HandleFunc("/api/servers/restart/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -155,7 +160,6 @@ func ApiRestart(mux *http.ServeMux, ctx context.Context, cli *client.Client, sto
 			http.Error(w, "server not found", http.StatusNotFound)
 			return
 		}
-
 		_, portStr, err := net.SplitHostPort(inst.Address)
 		if err != nil {
 			log.Printf("huginn: api: restart: bad address %q for %s: %v", inst.Address, inst.ID, err)
@@ -168,7 +172,12 @@ func ApiRestart(mux *http.ServeMux, ctx context.Context, cli *client.Client, sto
 			http.Error(w, "failed to restart server", http.StatusInternalServerError)
 			return
 		}
-
+		cli, err := hostPool.Get(inst.HostID)
+		if err != nil {
+			log.Printf("huginn: api: restart: %v", err)
+			http.Error(w, "host unavailable", http.StatusInternalServerError)
+			return
+		}
 		if err := StopInstance(ctx, cli, inst.ContainerID); err != nil {
 			log.Printf("huginn: api: restart: failed to stop old container for %s: %v", inst.ID, err)
 			http.Error(w, "failed to restart server", http.StatusInternalServerError)
@@ -183,7 +192,7 @@ func ApiRestart(mux *http.ServeMux, ctx context.Context, cli *client.Client, sto
 			http.Error(w, "failed to restart server", http.StatusInternalServerError)
 			return
 		}
-		reg.Register(inst.ID, containerID, inst.Address, inst.MaxPlayers)
+		reg.Register(inst.ID, containerID,inst.HostID,inst.Address, inst.MaxPlayers)
 
 		newInst, _ := reg.Get(inst.ID)
 		log.Printf("huginn: api: restarted instance %s via REST", inst.ID)

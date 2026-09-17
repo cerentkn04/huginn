@@ -6,11 +6,10 @@ import (
 	"log"
 
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
-func LogFleetStream(mux *http.ServeMux, reg *Registry, cli *client.Client) {
+func LogFleetStream(mux *http.ServeMux, reg *Registry,hostPool *HostPool ) {
 	mux.HandleFunc("/api/servers/logs/", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Path[len("/api/servers/logs/"):]
 		if code == "" {
@@ -20,6 +19,11 @@ func LogFleetStream(mux *http.ServeMux, reg *Registry, cli *client.Client) {
 		inst, ok := reg.GetByCode(code)
 		if !ok {
 			http.Error(w, "server not found", http.StatusNotFound)
+			return
+		}
+		cli, err := hostPool.Get(inst.HostID)
+		if err != nil {
+			http.Error(w, "host unavailable", http.StatusInternalServerError)
 			return
 		}
 

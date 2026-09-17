@@ -62,6 +62,8 @@ func main() {
 	}
 
 	defer cli.Close()
+	hostPool := core.NewHostPool()
+	hostPool.Add("gamegin", cli)
 
 	log.Printf("huginn: pulling image %s", cfg.Image)
 	if err := core.PullImage(ctx, cli, cfg.Image); err != nil {
@@ -84,7 +86,7 @@ for _, c := range discovered {
 	if !ok {
 		continue
 	}
-	reg.Register(id, containerID, address, cfg.MaxPlayers)
+	reg.Register(id, containerID,"gamegin", address, cfg.MaxPlayers)
 	adopted[id] = true
 	log.Printf("huginn: adopted existing instance %s (container %s)", id, containerID[:12])
 }
@@ -95,31 +97,35 @@ for i := 0; i < cfg.MinInstances; i++ {
 		continue
 	}
 	hostPort := cfg.GamePort + i
-	containerID, err := core.StartInstance(ctx, cli, cfg, instanceID, hostPort)
+	hostCli, err := hostPool.Get("gamegin")
+		if err != nil {
+		log.Fatalf("huginn: %v", err)
+	}
+	containerID, err := core.StartInstance(ctx, hostCli, cfg, instanceID, hostPort)
 	if err != nil {
 		log.Printf("huginn: instance %s failed to start: %v — rolling back", instanceID, err)
 		for _, inst := range reg.All() {
-			if stopErr := core.StopInstance(ctx, cli, inst.ContainerID); stopErr != nil {
+			if stopErr := core.StopInstance(ctx, hostCli, inst.ContainerID); stopErr != nil {
 				log.Printf("huginn: rollback: failed to stop %s: %v", inst.ID, stopErr)
 			}
 		}
 		os.Exit(1)
 	}
 	address := fmt.Sprintf("%s:%d", cfg.PublicHost, hostPort)
-	reg.Register(instanceID, containerID, address, cfg.MaxPlayers)
+	reg.Register(instanceID, containerID,"gamegin", address, cfg.MaxPlayers)
 	log.Printf("huginn: started instance %s on host port %d (container %s)", instanceID, hostPort, containerID[:12])
 }
 		
 	log.Printf("huginn: %d instance(s) running, heartbeats on %s", cfg.MinInstances, cfg.UDPListenAddr)
 	go func() {
-		srv := core.NewRestServer(ctx, cli, store, reg)
+		srv := core.NewRestServer(ctx, hostPool, store, reg)
 		if err := srv.ListenAndServe(); err != nil {
 			log.Printf("huginn: REST API server failed: %v", err)
 		}
 	}()
 	go core.EnsureFirewall(ctx, cfg)
 	go func() {
-		if err := core.RunScalingLoop(ctx, cli, store, reg); err != nil && ctx.Err() == nil {
+		if err := core.RunScalingLoop(ctx, hostPool, store, reg); err != nil && ctx.Err() == nil {
 			log.Printf("huginn: scaling loop failed: %v", err)
 		}
 	}()

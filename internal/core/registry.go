@@ -20,6 +20,7 @@ const (
 type Instance struct {
 	ID            string
 	ContainerID   string
+	HostID        string
 	State         InstanceState
 	PlayerCount   int
 	MaxPlayers    int
@@ -66,12 +67,13 @@ func (r *Registry) SetHeartbeatTimeout(d time.Duration) {
 	r.timeout = d
 }
 
-func (r *Registry) Register(id, containerID, address string, maxPlayers int) {
+func (r *Registry) Register(id, containerID,hostID, address string, maxPlayers int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.instances[id] = &Instance{
 		ID:            id,
 		ContainerID:   containerID,
+		HostID:        hostID,
 		Address:       address,
 		MaxPlayers:    maxPlayers,
 		JoinCode:      generateJoinCode(),
