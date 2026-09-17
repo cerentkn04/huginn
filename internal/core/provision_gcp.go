@@ -8,6 +8,7 @@ import (
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	"google.golang.org/protobuf/proto"
 )
+
 const dockerInstallScript = `#!/bin/bash
 apt-get update
 apt-get install -y ca-certificates curl
@@ -21,6 +22,7 @@ systemctl enable docker
 systemctl start docker
 touch /tmp/huginn-provision-done
 `
+
 func CreateHost(ctx context.Context, projectID, zone, name string) (*computepb.Instance, error) {
 	instancesClient, err := compute.NewInstancesRESTClient(ctx)
 	if err != nil {
@@ -87,7 +89,6 @@ func CreateHost(ctx context.Context, projectID, zone, name string) (*computepb.I
 	return inst, nil
 }
 
-// DeleteHost tears down a GCP VM by name. Blocks until deletion completes.
 func DeleteHost(ctx context.Context, projectID, zone, name string) error {
 	instancesClient, err := compute.NewInstancesRESTClient(ctx)
 	if err != nil {
@@ -106,13 +107,21 @@ func DeleteHost(ctx context.Context, projectID, zone, name string) error {
 	return nil
 }
 
-// ExternalIP returns the instance's external IPv4 address, if it has one.
 func ExternalIP(inst *computepb.Instance) string {
 	for _, ni := range inst.GetNetworkInterfaces() {
 		for _, ac := range ni.GetAccessConfigs() {
 			if ac.GetNatIP() != "" {
 				return ac.GetNatIP()
 			}
+		}
+	}
+	return ""
+}
+
+func InternalIP(inst *computepb.Instance) string {
+	for _, ni := range inst.GetNetworkInterfaces() {
+		if ni.GetNetworkIP() != "" {
+			return ni.GetNetworkIP()
 		}
 	}
 	return ""

@@ -39,6 +39,5 @@ func RunUDPListener(addr string, reg *Registry) error {
 		}
 
 		reg.Heartbeat(hb.InstanceID, hb.PlayerCount)
-		log.Printf("core: heartbeat instance=%s player_count=%d (from %s)", hb.InstanceID, hb.PlayerCount, from)
 	}
 }
