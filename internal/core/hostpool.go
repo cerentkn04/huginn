@@ -37,15 +37,14 @@ func (p *HostPool) Get(hostID string) (*client.Client, error) {
 	return cli, nil
 }
 func (p *HostPool) SelectHost() (string, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if len(p.hosts) == 0 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.order) == 0 {
 		return "", fmt.Errorf("hostpool: no hosts available")
 	}
-	for id := range p.hosts {
-		return id, nil
-	}
-	return "", fmt.Errorf("hostpool: no hosts available")
+	id := p.order[p.nextIdx%len(p.order)]
+	p.nextIdx++
+	return id, nil
 }
 func (p *HostPool) Remove(hostID string) {
 	p.mu.Lock()

@@ -12,9 +12,15 @@ import (
 
 func StopAndRemove(ctx context.Context, cli *client.Client, containerID string) error {
 	if err := cli.ContainerStop(ctx, containerID, container.StopOptions{}); err != nil {
-		log.Printf("huginn: stop failed for %s: %v", containerID[:12], err)
+		log.Printf("huginn: stop failed for %s: %v", shortID(containerID), err)
 	}
 	return cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
+}
+func shortID(id string) string {
+	if len(id) > 12 {
+		return id[:12]
+	}
+	return id
 }
 
 func RunReclaimLoop(ctx context.Context, cli *client.Client, reg *Registry, interval time.Duration) {
@@ -36,8 +42,12 @@ func reclaimUnhealthy(ctx context.Context, cli *client.Client, reg *Registry) {
 		if inst.State != "unhealthy" {
 			continue
 		}
+containerIDShort := inst.ContainerID
+if len(containerIDShort) > 12 {
+	containerIDShort = containerIDShort[:12]
+}
+log.Printf("huginn: reclaiming unhealthy instance %s (container %s)", inst.ID, shortID(inst.ContainerID))
 
-		log.Printf("huginn: reclaiming unhealthy instance %s (container %s)", inst.ID, inst.ContainerID[:12])
 		if err := StopAndRemove(ctx, cli, inst.ContainerID); err != nil {
 			log.Printf("huginn: reclaim: remove failed for %s: %v", inst.ID, err)
 			continue

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os/exec"
 	"time"
 
-	"os/exec"
 	"github.com/docker/docker/client"
 	"huginn/internal/core"
 )
@@ -39,29 +39,42 @@ func main() {
 			log.Fatalf("host never became ready: %v\n%s", err, out)
 		}
 	}
+
 	log.Println("generating server cert for this host...")
 	certPEM, keyPEM, err := core.GenerateServerCert(caCertPath, caKeyPath, ip)
 	if err != nil {
 		log.Fatalf("cert generation failed: %v", err)
 	}
-
-	log.Println("pushing TLS config to host...")
 	if err := core.SetupRemoteTLS(zone, name, caCertPath, certPEM, keyPEM); err != nil {
 		log.Fatalf("TLS setup failed: %v", err)
 	}
 
-	log.Println("connecting Core to the new host over TLS...")
-	cli, err := client.NewClientWithOpts(
+	remoteCli, err := client.NewClientWithOpts(
 		client.WithHost(fmt.Sprintf("tcp://%s:2376", ip)),
 		client.WithTLSClientConfig(caCertPath, clientCertPath, clientKeyPath),
 		client.WithAPIVersionNegotiation(),
 	)
 	if err != nil {
-		log.Fatalf("docker client failed: %v", err)
+		log.Fatalf("remote docker client failed: %v", err)
+	}
+
+	localCli, err := core.NewDockerClient()
+	if err != nil {
+		log.Fatalf("local docker client failed: %v", err)
 	}
 
 	hostPool := core.NewHostPool()
-	hostPool.Add(name, cli)
+	hostPool.Add("gamegin", localCli)
+	hostPool.Add(name, remoteCli)
+
+	fmt.Println("\n--- testing SelectHost round-robin ---")
+	for i := 0; i < 5; i++ {
+		id, err := hostPool.SelectHost()
+		if err != nil {
+			log.Fatalf("SelectHost failed: %v", err)
+		}
+		fmt.Printf("pick %d: %s\n", i+1, id)
+	}
 
 	cfg, err := core.LoadConfig("/home/cerentkn04/hugin/configs/example.yaml")
 	if err != nil {
@@ -69,22 +82,30 @@ func main() {
 	}
 	cfg.InternalHost = core.DiscoverInternalHost(cfg)
 
-	log.Println("pulling image on second host...")
-	if err := core.PullImage(ctx, cli, cfg.Image); err != nil {
+	log.Println("\npulling image on second host...")
+	if err := core.PullImage(ctx, remoteCli, cfg.Image); err != nil {
 		log.Fatalf("pull failed: %v", err)
 	}
-
-	log.Println("starting a real game server container on the SECOND host...")
-	containerID, err := core.StartInstance(ctx, cli, cfg, "huginn-test-remote", 7778)
+	log.Println("starting a container on the SECOND host...")
+	containerID, err := core.StartInstance(ctx, remoteCli, cfg, "huginn-test-remote", 7778)
 	if err != nil {
 		log.Fatalf("start failed: %v", err)
 	}
-	fmt.Printf("SUCCESS: container %s running on %s\n", containerID[:12], name)
+	fmt.Printf("container %s running on %s\n", containerID[:12], name)
 
-	fmt.Println("press Enter to clean up (stop container + delete host)")
+	fmt.Println("\n--- testing DiscoverAllHosts ---")
+	results, err := core.DiscoverAllHosts(ctx, hostPool)
+	if err != nil {
+		log.Fatalf("DiscoverAllHosts failed: %v", err)
+	}
+	for _, dh := range results {
+		fmt.Printf("host %s: %d container(s)\n", dh.HostID, len(dh.Containers))
+	}
+
+	fmt.Println("\npress Enter to clean up (stop remote container + delete host)")
 	fmt.Scanln()
 
-	if err := core.StopInstance(ctx, cli, containerID); err != nil {
+	if err := core.StopInstance(ctx, remoteCli, containerID); err != nil {
 		log.Printf("stop failed: %v", err)
 	}
 	if err := core.DeleteHost(ctx, project, zone, name); err != nil {
