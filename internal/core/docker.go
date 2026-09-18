@@ -8,6 +8,10 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"io"
+	"os/exec"
+	"encoding/json"
+	"encoding/base64"
+
 	"strings"
 	"net"
 )
@@ -77,8 +81,11 @@ func PullImage(ctx context.Context, cli *client.Client, imageName string) error 
 	if _, _, err := cli.ImageInspectWithRaw(ctx, imageName); err == nil {
 		return nil
 	}
-
-	reader, err := cli.ImagePull(ctx, imageName, types.ImagePullOptions{})
+	authStr, err := buildRegistryAuth()
+	if err != nil {
+		return fmt.Errorf("docker: building registry auth: %w", err)
+	}
+	reader, err := cli.ImagePull(ctx, imageName,  types.ImagePullOptions{RegistryAuth: authStr})
 	if err != nil {
 		return friendlyPullError(imageName, err)
 	}
@@ -87,6 +94,24 @@ func PullImage(ctx context.Context, cli *client.Client, imageName string) error 
 		return friendlyPullError(imageName, err)
 	}
 	return nil
+}
+
+func buildRegistryAuth() (string, error) {
+	out, err := exec.Command("gcloud", "auth", "print-access-token").Output()
+	if err != nil {
+		return "", fmt.Errorf("getting gcloud access token: %w", err)
+	}
+	token := strings.TrimSpace(string(out))
+
+	authConfig := types.AuthConfig{
+		Username: "oauth2accesstoken",
+		Password: token,
+	}
+	authJSON, err := json.Marshal(authConfig)
+	if err != nil {
+		return "", fmt.Errorf("marshaling auth config: %w", err)
+	}
+	return base64.URLEncoding.EncodeToString(authJSON), nil
 }
 
 func friendlyPullError(imageName string, err error) error {

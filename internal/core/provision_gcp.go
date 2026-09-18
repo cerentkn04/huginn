@@ -8,7 +8,6 @@ import (
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	"google.golang.org/protobuf/proto"
 )
-
 const dockerInstallScript = `#!/bin/bash
 apt-get update
 apt-get install -y ca-certificates curl
@@ -20,6 +19,11 @@ apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 systemctl enable docker
 systemctl start docker
+GCR_HELPER_URL=$(curl -s https://api.github.com/repos/GoogleCloudPlatform/docker-credential-gcr/releases/latest | grep browser_download_url | grep linux_amd64 | cut -d '"' -f 4)
+curl -fsSL "$GCR_HELPER_URL" -o /tmp/docker-credential-gcr.tar.gz
+tar -xzf /tmp/docker-credential-gcr.tar.gz -C /usr/local/bin docker-credential-gcr
+chmod +x /usr/local/bin/docker-credential-gcr
+/usr/local/bin/docker-credential-gcr configure-docker --registries=us-central1-docker.pkg.dev
 touch /tmp/huginn-provision-done
 `
 
@@ -38,6 +42,14 @@ func CreateHost(ctx context.Context, projectID, zone, name string) (*computepb.I
 			MachineType: proto.String(fmt.Sprintf("zones/%s/machineTypes/e2-small", zone)),
 			Tags: &computepb.Tags{
 				Items: []string{"huginn-managed"},
+			},
+			ServiceAccounts: []*computepb.ServiceAccount{
+				{
+					Email: proto.String("1062447746316-compute@developer.gserviceaccount.com"),
+					Scopes: []string{
+						"https://www.googleapis.com/auth/cloud-platform",
+					},
+				},
 			},
 			Disks: []*computepb.AttachedDisk{
 				{

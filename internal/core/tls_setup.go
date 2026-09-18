@@ -27,8 +27,6 @@ func parsePrivateKey(der []byte) (*rsa.PrivateKey, error) {
 	}
 	return rsaKey, nil
 }
-// GenerateServerCert creates a fresh server certificate for the given IP,
-// signed by the CA at caCertPath/caKeyPath. Returns the cert and key as PEM bytes.
 func GenerateServerCert(caCertPath, caKeyPath, ip string) (certPEM, keyPEM []byte, err error) {
 	caCertBytes, err := os.ReadFile(caCertPath)
 	if err != nil {
@@ -80,8 +78,6 @@ func GenerateServerCert(caCertPath, caKeyPath, ip string) (certPEM, keyPEM []byt
 	return certPEM, keyPEM, nil
 }
 
-// SetupRemoteTLS pushes a server cert/key + the CA cert to the given GCP instance
-// and reconfigures its Docker daemon to listen over TCP with TLS.
 func SetupRemoteTLS(zone, instanceName string, caCertPath string, serverCertPEM, serverKeyPEM []byte) error {
 	tmpCert, err := os.CreateTemp("", "server-cert-*.pem")
 	if err != nil {
@@ -102,12 +98,14 @@ func SetupRemoteTLS(zone, instanceName string, caCertPath string, serverCertPEM,
 		return fmt.Errorf("writing temp key: %w", err)
 	}
 	tmpKey.Close()
+scpArgs := []string{
+    caCertPath,
+    tmpCert.Name(),
+    tmpKey.Name(),
+    fmt.Sprintf("%s:/tmp/", instanceName),
+    "--zone=" + zone,
+}
 
-	scpArgs := []string{
-		caCertPath, tmpCert.Name(), tmpKey.Name(),
-		fmt.Sprintf("%s:/tmp/", instanceName),
-		"--zone=" + zone,
-	}
 	if out, err := exec.Command("gcloud", append([]string{"compute", "scp"}, scpArgs...)...).CombinedOutput(); err != nil {
 		return fmt.Errorf("scp to %s failed: %w\n%s", instanceName, err, out)
 	}
@@ -129,10 +127,15 @@ sudo systemctl restart docker
 `, baseName(caCertPath), tmpCert.Name()[len("/tmp/"):], tmpKey.Name()[len("/tmp/"):])
 
 	sshArgs := []string{"compute", "ssh", instanceName, "--zone=" + zone, "--command=" + remoteScript}
-	if out, err := exec.Command("gcloud", sshArgs...).CombinedOutput(); err != nil {
-		return fmt.Errorf("ssh config on %s failed: %w\n%s", instanceName, err, out)
-	}
-	return nil
+		cmd := exec.Command("gcloud", sshArgs...)
+cmd.Stdin = os.Stdin
+cmd.Stdout = os.Stdout
+cmd.Stderr = os.Stderr
+
+if err := cmd.Run(); err != nil {
+    return fmt.Errorf("ssh config on %s failed: %w", instanceName, err)
+}
+return nil
 }
 
 func baseName(path string) string {

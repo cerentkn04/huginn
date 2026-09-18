@@ -1,5 +1,5 @@
 game: huginn-fps-demo
-image: hugin-server:latest
+image: us-central1-docker.pkg.dev/project-79591f24-2c6a-498e-8b3/huginn-images/hugin-server:latest
 min_instances: 3
 max_instances: 10
 buffer_size: 3
