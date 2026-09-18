@@ -7,7 +7,7 @@ const stateColors = {
   draining: "#fb923c",
 };
 
-export default function Hosts() {
+export default function Hosts({ onSelectHost }) {
   const [hosts, setHosts] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -36,7 +36,7 @@ export default function Hosts() {
       ) : (
         <div style={styles.list}>
           {hosts.map((h) => (
-            <div key={h.ID} style={styles.card}>
+		  <div key={h.ID} style={{ ...styles.card, cursor: "pointer" }} onClick={() => onSelectHost(h.ID)}>
               <div style={styles.cardHeader}>
                 <span style={{ ...styles.dot, background: stateColors[h.State] }} />
                 <span style={styles.id}>{h.ID}</span>

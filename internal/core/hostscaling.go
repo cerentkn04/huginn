@@ -90,65 +90,8 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
 			mu.Lock()
 			provisioning = true
 			mu.Unlock()
-			go func() {
-				defer func() {
-					mu.Lock()
-					provisioning = false
-					mu.Unlock()
-				}()
-				log.Printf("huginn: host-scaling: all hosts over threshold, provisioning a new host...")
 
-				newHostID := fmt.Sprintf("huginn-host-%d", time.Now().Unix())
-				hostRegistry.SetState(newHostID, HostStateStarting)
-
-				inst, err := CreateHost(ctx, cfg.GCPProject, cfg.GCPZone, newHostID)
-				if err != nil {
-					log.Printf("huginn: host-scaling: failed to create host: %v", err)
-					hostRegistry.Remove(newHostID)
-					return
-				}
-				ip := InternalIP(inst)
-
-				certsDir := "certs"
-				caCertPath := certsDir + "/ca.pem"
-				caKeyPath := certsDir + "/ca-key.pem"
-
-				if err := waitForSSH(newHostID, cfg.GCPZone); err != nil {
-					log.Printf("huginn: host-scaling: host never became ready: %v", err)
-					hostRegistry.Remove(newHostID)
-					return
-				}
-
-				certPEM, keyPEM, err := GenerateServerCert(caCertPath, caKeyPath, ip)
-				if err != nil {
-					log.Printf("huginn: host-scaling: cert generation failed: %v", err)
-					hostRegistry.Remove(newHostID)
-					return
-				}
-				if err := SetupRemoteTLS(cfg.GCPZone, newHostID, caCertPath, certPEM, keyPEM); err != nil {
-					log.Printf("huginn: host-scaling: TLS setup failed: %v", err)
-					hostRegistry.Remove(newHostID)
-					return
-				}
-
-				clientCertPath := certsDir + "/client-cert.pem"
-				clientKeyPath := certsDir + "/client-key.pem"
-				cli, err := client.NewClientWithOpts(
-					client.WithHost(fmt.Sprintf("tcp://%s:2376", ip)),
-					client.WithTLSClientConfig(caCertPath, clientCertPath, clientKeyPath),
-					client.WithAPIVersionNegotiation(),
-				)
-				if err != nil {
-					log.Printf("huginn: host-scaling: docker client failed: %v", err)
-					hostRegistry.Remove(newHostID)
-					return
-				}
-
-				hostPool.Add(newHostID, cli)
-				hostRegistry.SetState(newHostID, HostStateReady)
-				log.Printf("huginn: host-scaling: new host %s ready and added to pool", newHostID)
-			}()
-			
+						
 			go func() {
 				defer func() {
 					mu.Lock()

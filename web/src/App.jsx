@@ -4,13 +4,14 @@ import Fleet from "./components/Fleet";
 import Hosts from "./components/Hosts";
 import Config from "./components/Config";
 
+
 export default function App() {
   const [activeTab, setActiveTab] = useState("fleet");
+  const [hostFilter, setHostFilter] = useState(null);
   const [instances, setInstances] = useState([]);
   const [status, setStatus] = useState("connecting");
   const [connected, setConnected] = useState(false);
   const [loaded, setLoaded] = useState(false);
-
   useEffect(() => {
     const es = new EventSource("/api/fleet/stream");
 
@@ -33,14 +34,29 @@ export default function App() {
     return () => es.close();
   }, []);
 
+  const goToHost = (hostID) => {
+    setHostFilter(hostID);
+    setActiveTab("fleet");
+  };
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    if (tab !== "fleet") setHostFilter(null);
+  };
+
   return (
     <div style={styles.layout}>
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} status={status} />
+      <Sidebar activeTab={activeTab} onTabChange={handleTabChange} status={status} />
       <div style={styles.content}>
         {activeTab === "fleet" ? (
-          <Fleet instances={instances} loaded={loaded} />
+          <Fleet
+            instances={instances}
+            loaded={loaded}
+            hostFilter={hostFilter}
+            onClearFilter={() => setHostFilter(null)}
+          />
         ) : activeTab === "hosts" ? (
-          <Hosts />
+          <Hosts onSelectHost={goToHost} />
         ) : (
           <Config />
         )}

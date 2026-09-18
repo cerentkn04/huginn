@@ -78,7 +78,7 @@ function Field({ label, value, onCopy }) {
   );
 }
 
-export default function Fleet({ instances, loaded }) {
+export default function Fleet({ instances, loaded, hostFilter, onClearFilter }) {
   const [selectedId, setSelectedId] = useState(null);
   const [confirmingStop, setConfirmingStop] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -94,8 +94,10 @@ const [restartError, setRestartError] = useState(null);
   ).length;
 
   const selected = instances.find((i) => i.ID === selectedId) || null;  // ← moved up
-
-  useEffect(() => {
+    const displayedInstances = hostFilter
+    ? instances.filter((i) => i.HostID === hostFilter)
+    : instances;
+    useEffect(() => {
     if (!selected) return;
     
 
@@ -182,10 +184,12 @@ const handleRestart = async (id) => {
         <div style={styles.sidebar}>
           {!loaded ? (
             <div style={styles.sidebarNote}>Loading fleet…</div>
-          ) : instances.length === 0 ? (
-            <div style={styles.sidebarNote}>No instances running</div>
-          ) : (
-            instances.map((inst) => (
+          ) :  displayedInstances.length === 0 ? (
+		   <div style={styles.sidebarNote}>
+    			{hostFilter ? `No instances on ${hostFilter}` : "No instances running"}
+  		   </div>
+            ) : (
+            displayedInstances.map((inst)=> (
               <div
                 key={inst.ID}
                 style={{
@@ -206,6 +210,12 @@ const handleRestart = async (id) => {
         </div>
 
         <div style={styles.detailPane}>
+	  {hostFilter && (
+  <div style={styles.filterBanner}>
+    Filtered by host: <strong>{hostFilter}</strong>
+    <button style={styles.clearFilterButton} onClick={onClearFilter}>Clear</button>
+  </div>
+)}
           {!selected ? (
             <div style={styles.placeholder}>Select an instance to view details</div>
           ) : (
@@ -451,6 +461,27 @@ tabButtonActive: { color: "#fff", borderBottom: "2px solid #4ade80" },
     color: "#fff",
     minHeight: "300px",
   },
+	filterBanner: {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  background: "#161b22",
+  border: "1px solid #30363d",
+  borderRadius: "6px",
+  padding: "8px 14px",
+  marginBottom: "16px",
+  color: "#9ca3af",
+  fontSize: "13px",
+},
+clearFilterButton: {
+  background: "#374151",
+  color: "#e5e7eb",
+  border: "none",
+  padding: "4px 10px",
+  borderRadius: "4px",
+  cursor: "pointer",
+  fontSize: "12px",
+},
   historyTitle: { marginTop: 0, marginBottom: "16px", fontSize: "14px", color: "#9ca3af" },
   sparklineEmpty: { color: "#6b7280", fontStyle: "italic", marginTop: "16px", fontSize: "13px" },
   fieldValueRow: { display: "flex", alignItems: "center", gap: "8px" },
