@@ -67,7 +67,6 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, store *ConfigSt
 
 			allFull := len(results) > 0
 			for _, u := range results {
-				log.Printf("huginn: host-scaling: [debug] host=%s cpu=%.1f%% mem=%.1f%%", u.HostID, u.CPUPercent, u.MemoryPercent)
 				if !hostNeedsRelief(u, cfg.HostScaleUpThreshold) {
 					allFull = false
 					break
