@@ -19,7 +19,7 @@ type summary struct {
 	TotalPlayer    int
 }
 
-func NewRestServer(ctx context.Context, hostPool *HostPool, store *ConfigStore, reg *Registry) *http.Server {
+func NewRestServer(ctx context.Context, hostPool *HostPool,  hostRegistry *HostRegistry,store *ConfigStore, reg *Registry) *http.Server {
 	mux := http.NewServeMux()
 	ApiAvailable(mux, reg)
 	ApiFleet(mux, reg)
@@ -30,6 +30,8 @@ func NewRestServer(ctx context.Context, hostPool *HostPool, store *ConfigStore, 
 	ApiServers(mux, reg)
 	LogFleetStream(mux, reg,hostPool)
 	ApiConfig(mux, store, reg)
+	ApiHosts(mux, hostRegistry)
+	ApiHostsStream(mux, hostRegistry)
 	if err := ServeDashboard(mux); err != nil {
 		log.Printf("huginn: dashboard unavailable: %v", err)
 	}
@@ -220,6 +222,58 @@ func ServeDashboard(mux *http.ServeMux) error {
 		return fmt.Errorf("dashboard: %w", err)
 	}
 	mux.Handle("/", http.FileServer(http.FS(dist)))
+	return nil
+}
+func ApiHosts(mux *http.ServeMux, hostRegistry *HostRegistry) {
+	mux.HandleFunc("/api/hosts", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(hostRegistry.All())
+	})
+}
+
+func ApiHostsStream(mux *http.ServeMux, hostRegistry *HostRegistry) {
+	mux.HandleFunc("/api/hosts/stream", func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+
+		if err := writeHostSnapshot(w, flusher, hostRegistry); err != nil {
+			log.Printf("huginn: hosts sse: initial write failed: %v", err)
+			return
+		}
+
+		for {
+			select {
+			case <-r.Context().Done():
+				log.Printf("huginn: hosts sse: client disconnected")
+				return
+			case <-ticker.C:
+				if err := writeHostSnapshot(w, flusher, hostRegistry); err != nil {
+					log.Printf("huginn: hosts sse: write failed: %v", err)
+					return
+				}
+			}
+		}
+	})
+}
+
+func writeHostSnapshot(w http.ResponseWriter, flusher http.Flusher, hostRegistry *HostRegistry) error {
+	payload, err := json.Marshal(hostRegistry.All())
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+		return err
+	}
+	flusher.Flush()
 	return nil
 }
 func ApiConfig(mux *http.ServeMux, store *ConfigStore, reg *Registry) {
