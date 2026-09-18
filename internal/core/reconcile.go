@@ -8,6 +8,10 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 )
+type DiscoveredHost struct {
+	HostID     string
+	Containers []types.Container
+}
 func InstanceFromContainer(c types.Container, cfg Config, publicHost string) (id string, containerID string, address string, ok bool) {
 	instanceID, exists := c.Labels["huginn.instance_id"]
 	if !exists {
@@ -41,3 +45,20 @@ func DiscoverInstances(ctx context.Context, cli *client.Client) ([]types.Contain
 	}
 	return containers, nil
 }
+
+func DiscoverAllHosts(ctx context.Context, hostPool *HostPool) ([]DiscoveredHost, error) {
+	var results []DiscoveredHost
+	for _, hostID := range hostPool.HostIDs() {
+		cli, err := hostPool.Get(hostID)
+		if err != nil {
+			continue
+		}
+		containers, err := DiscoverInstances(ctx, cli)
+		if err != nil {
+			return nil, fmt.Errorf("discovering on host %s: %w", hostID, err)
+		}
+		results = append(results, DiscoveredHost{HostID: hostID, Containers: containers})
+	}
+	return results, nil
+}
+

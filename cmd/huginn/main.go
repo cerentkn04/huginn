@@ -79,20 +79,22 @@ func main() {
 	}
 
 	store := core.NewConfigStore(cfg)
-discovered, err := core.DiscoverInstances(ctx, cli)
+discoveredHosts, err := core.DiscoverAllHosts(ctx, hostPool)
 if err != nil {
 	log.Fatalf("huginn: failed to discover existing containers: %v", err)
 }
 
 adopted := make(map[string]bool)
-for _, c := range discovered {
-	id, containerID, address, ok := core.InstanceFromContainer(c, cfg, cfg.PublicHost)
-	if !ok {
-		continue
+for _, dh := range discoveredHosts {
+	for _, c := range dh.Containers {
+		id, containerID, address, ok := core.InstanceFromContainer(c, cfg, cfg.PublicHost)
+		if !ok {
+			continue
+		}
+		reg.Register(id, containerID, dh.HostID, address, cfg.MaxPlayers)
+		adopted[id] = true
+		log.Printf("huginn: adopted existing instance %s on host %s (container %s)", id, dh.HostID, containerID[:12])
 	}
-	reg.Register(id, containerID,"gamegin", address, cfg.MaxPlayers)
-	adopted[id] = true
-	log.Printf("huginn: adopted existing instance %s (container %s)", id, containerID[:12])
 }
 
 for i := 0; i < cfg.MinInstances; i++ {
