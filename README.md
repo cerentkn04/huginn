@@ -1,12 +1,9 @@
 # Huginn
 
-A lightweight game server fleet manager for indie and small multiplayer game studios — think **"Agones without Kubernetes."**
+A lightweight game server fleet manager for indie and small game studios — think **"Agones without Kubernetes."**
 
 Huginn takes a YAML config describing your dedicated server, spins up instances as Docker containers, tracks their health and player counts via heartbeats, and auto-scales up or down within limits you set. It can also run across multiple machines and provision new ones automatically as load grows — no Kubernetes cluster, no manual server management, just Docker and a single binary.
 
-## Why
-
-Small teams shipping a multiplayer game are usually stuck between two bad options: manually SSH-ing into a VPS to start/stop servers by hand, or adopting Agones — powerful, but built on Kubernetes, which is real operational overhead for a team without dedicated infra staff. Huginn aims for the middle ground: self-hosted, Docker-based, and simple enough to run on a single machine — while still able to scale out to more machines automatically when one isn't enough.
 
 ## Quickstart
 
