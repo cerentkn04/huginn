@@ -64,6 +64,7 @@ func main() {
 	defer cli.Close()
 	hostPool := core.NewHostPool()
 	hostPool.Add("gamegin", cli)
+	hostRegistry := core.NewHostRegistry()
 
 	log.Printf("huginn: pulling image %s", cfg.Image)
 	if err := core.PullImage(ctx, cli, cfg.Image); err != nil {
@@ -128,7 +129,7 @@ for i := 0; i < cfg.MinInstances; i++ {
 		
 	log.Printf("huginn: %d instance(s) running, heartbeats on %s", cfg.MinInstances, cfg.UDPListenAddr)
 	go func() {
-		srv := core.NewRestServer(ctx, hostPool, store, reg)
+		srv := core.NewRestServer(ctx, hostPool, hostRegistry, store, reg)
 		if err := srv.ListenAndServe(); err != nil {
 			log.Printf("huginn: REST API server failed: %v", err)
 		}
@@ -145,7 +146,7 @@ for i := 0; i < cfg.MinInstances; i++ {
 		}
 	}()
 		go func() {
-		if err := core.RunHostScalingLoop(ctx, hostPool, store, 15*time.Second); err != nil && ctx.Err() == nil {
+		if err := core.RunHostScalingLoop(ctx, hostPool, hostRegistry, store, 15*time.Second); err != nil && ctx.Err() == nil {
 			log.Printf("huginn: host-scaling loop failed: %v", err)
 		}
 	}()
