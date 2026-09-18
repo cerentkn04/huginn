@@ -144,6 +144,11 @@ for i := 0; i < cfg.MinInstances; i++ {
 			log.Printf("huginn: scale-down loop failed: %v", err)
 		}
 	}()
+		go func() {
+		if err := core.RunHostScalingLoop(ctx, hostPool, store, 15*time.Second); err != nil && ctx.Err() == nil {
+			log.Printf("huginn: host-scaling loop failed: %v", err)
+		}
+	}()
 	go core.RunReclaimLoop(ctx, cli, reg, 10*time.Second)
 	<-ctx.Done()
 

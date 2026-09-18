@@ -4,18 +4,136 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os/exec"
+	"sync"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 )
 
 type HostUtilization struct {
-	HostID            string
-	InstanceCount     int
-	CPUPercent        float64
-	MemoryPercent     float64
-	MemoryUsedBytes   uint64
-	MemoryTotalBytes  int64
+	HostID           string
+	InstanceCount    int
+	CPUPercent       float64
+	MemoryPercent    float64
+	MemoryUsedBytes  uint64
+	MemoryTotalBytes int64
+}
+
+func hostNeedsRelief(u HostUtilization, threshold float64) bool {
+	return u.CPUPercent > threshold || u.MemoryPercent > threshold
+}
+
+func waitForSSH(hostID, zone string) error {
+	for i := 0; i < 30; i++ {
+		time.Sleep(10 * time.Second)
+		cmd := exec.Command("gcloud", "compute", "ssh", hostID, "--zone="+zone, "--command=cat /tmp/huginn-provision-done")
+		if out, err := cmd.CombinedOutput(); err == nil {
+			return nil
+		} else if i == 29 {
+			return fmt.Errorf("host never became ready: %v\n%s", err, out)
+		}
+	}
+	return fmt.Errorf("unreachable")
+}
+
+func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, store *ConfigStore, interval time.Duration) error {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	var provisioning bool
+	var mu sync.Mutex
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			mu.Lock()
+			if provisioning {
+				mu.Unlock()
+				continue
+			}
+			mu.Unlock()
+
+			cfg := store.Get()
+			results, err := GetPoolUtilization(ctx, hostPool)
+			if err != nil {
+				log.Printf("huginn: host-scaling: utilization check failed: %v", err)
+				continue
+			}
+
+			allFull := len(results) > 0
+			for _, u := range results {
+				log.Printf("huginn: host-scaling: [debug] host=%s cpu=%.1f%% mem=%.1f%%", u.HostID, u.CPUPercent, u.MemoryPercent)
+				if !hostNeedsRelief(u, cfg.HostScaleUpThreshold) {
+					allFull = false
+					break
+				}
+			}
+
+			if !allFull {
+				continue
+			}
+
+			mu.Lock()
+			provisioning = true
+			mu.Unlock()
+
+			go func() {
+				defer func() {
+					mu.Lock()
+					provisioning = false
+					mu.Unlock()
+				}()
+				log.Printf("huginn: host-scaling: all hosts over threshold, provisioning a new host...")
+
+				newHostID := fmt.Sprintf("huginn-host-%d", time.Now().Unix())
+				inst, err := CreateHost(ctx, cfg.GCPProject, cfg.GCPZone, newHostID)
+				if err != nil {
+					log.Printf("huginn: host-scaling: failed to create host: %v", err)
+					return
+				}
+				ip := InternalIP(inst)
+
+				certsDir := "certs"
+				caCertPath := certsDir + "/ca.pem"
+				caKeyPath := certsDir + "/ca-key.pem"
+
+				if err := waitForSSH(newHostID, cfg.GCPZone); err != nil {
+					log.Printf("huginn: host-scaling: host never became ready: %v", err)
+					return
+				}
+
+				certPEM, keyPEM, err := GenerateServerCert(caCertPath, caKeyPath, ip)
+				if err != nil {
+					log.Printf("huginn: host-scaling: cert generation failed: %v", err)
+					return
+				}
+				if err := SetupRemoteTLS(cfg.GCPZone, newHostID, caCertPath, certPEM, keyPEM); err != nil {
+					log.Printf("huginn: host-scaling: TLS setup failed: %v", err)
+					return
+				}
+
+				clientCertPath := certsDir + "/client-cert.pem"
+				clientKeyPath := certsDir + "/client-key.pem"
+				cli, err := client.NewClientWithOpts(
+					client.WithHost(fmt.Sprintf("tcp://%s:2376", ip)),
+					client.WithTLSClientConfig(caCertPath, clientCertPath, clientKeyPath),
+					client.WithAPIVersionNegotiation(),
+				)
+				if err != nil {
+					log.Printf("huginn: host-scaling: docker client failed: %v", err)
+					return
+				}
+
+				hostPool.Add(newHostID, cli)
+				log.Printf("huginn: host-scaling: new host %s ready and added to pool", newHostID)
+			}()
+		}
+	}
 }
 
 func GetPoolUtilization(ctx context.Context, hostPool *HostPool) ([]HostUtilization, error) {
@@ -33,6 +151,7 @@ func GetPoolUtilization(ctx context.Context, hostPool *HostPool) ([]HostUtilizat
 	}
 	return results, nil
 }
+
 func GetHostUtilization(ctx context.Context, hostID string, cli *client.Client) (HostUtilization, error) {
 	info, err := cli.Info(ctx)
 	if err != nil {
@@ -53,7 +172,7 @@ func GetHostUtilization(ctx context.Context, hostID string, cli *client.Client) 
 	for _, c := range containers {
 		cpuPct, memUsed, err := containerStats(ctx, cli, c.ID)
 		if err != nil {
-			continue // a container mid-stop/mid-start shouldn't kill the whole check
+			continue
 		}
 		util.CPUPercent += cpuPct
 		util.MemoryUsedBytes += memUsed

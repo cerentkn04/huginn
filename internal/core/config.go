@@ -24,6 +24,10 @@ type Config struct {
 	InternalHost string `yaml:"-" json:"internal_host"`
 	CloudProvider    string `yaml:"cloud_provider" json:"cloud_provider"`
 	FirewallManage   bool   `yaml:"firewall_manage" json:"firewall_manage"`
+	GCPProject      string `yaml:"gcp_project" json:"gcp_project"`
+	GCPZone         string `yaml:"gcp_zone" json:"gcp_zone"`
+	HostScaleUpThreshold float64 `yaml:"host_scale_up_threshold_percent" json:"host_scale_up_threshold_percent"`
+
 
 	path string // where this was loaded from; unexported so it never serializes
 }
