@@ -33,8 +33,11 @@ func RunScalingLoop(ctx context.Context, hostPool *HostPool, store *ConfigStore,
 
 			instanceID := fmt.Sprintf("huginn-inst-%d", nextIndex)
 			hostPort := cfg.GamePort + nextIndex
+				
+			hostID, err := hostPool.SelectHost() 
+			if err != nil {continue}
 
-			cli, err := hostPool.Get("gamegin")
+			cli, err := hostPool.Get(hostID)
 			if err != nil {
 				log.Printf("huginn: scale-up: %v", err)
 				continue
@@ -46,7 +49,7 @@ func RunScalingLoop(ctx context.Context, hostPool *HostPool, store *ConfigStore,
 			}
 			nextIndex++
 			address := fmt.Sprintf("%s:%d", cfg.PublicHost, hostPort)
-			reg.Register(instanceID, containerID, "gamegin", address, cfg.MaxPlayers)
+			reg.Register(instanceID, containerID, hostID, address, cfg.MaxPlayers)
 			log.Printf("huginn: scaled up: started instance %s on host port %d (container %s)", instanceID, hostPort, containerID[:12])
 		}
 	}

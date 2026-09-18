@@ -101,7 +101,11 @@ for i := 0; i < cfg.MinInstances; i++ {
 		continue
 	}
 	hostPort := cfg.GamePort + i
-	hostCli, err := hostPool.Get("gamegin")
+	hostID, err := hostPool.SelectHost()
+		if err != nil {
+		log.Fatalf("huginn: %v", err)
+	}
+	hostCli, err := hostPool.Get(hostID)
 		if err != nil {
 		log.Fatalf("huginn: %v", err)
 	}
@@ -116,7 +120,7 @@ for i := 0; i < cfg.MinInstances; i++ {
 		os.Exit(1)
 	}
 	address := fmt.Sprintf("%s:%d", cfg.PublicHost, hostPort)
-	reg.Register(instanceID, containerID,"gamegin", address, cfg.MaxPlayers)
+	reg.Register(instanceID, containerID,hostID, address, cfg.MaxPlayers)
 	log.Printf("huginn: started instance %s on host port %d (container %s)", instanceID, hostPort, containerID[:12])
 }
 		
