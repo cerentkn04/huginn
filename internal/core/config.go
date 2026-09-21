@@ -27,7 +27,7 @@ type Config struct {
 	GCPProject      string `yaml:"gcp_project" json:"gcp_project"`
 	GCPZone         string `yaml:"gcp_zone" json:"gcp_zone"`
 	HostScaleUpThreshold float64 `yaml:"host_scale_up_threshold_percent" json:"host_scale_up_threshold_percent"`
-
+	AuthToken string `yaml:"auth_token" json:"-"` 
 
 	path string // where this was loaded from; unexported so it never serializes
 }

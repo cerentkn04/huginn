@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"crypto/rand"
+	"encoding/hex"
 )
 
 func runInit() {
@@ -17,7 +19,7 @@ func runInit() {
 	maxInstances := promptInt(reader, "Maximum instances", 10)
 	maxPlayers := promptInt(reader, "Max players per instance", 16)
 	port := promptInt(reader, "Game server UDP port", 7778)
-
+  	token := generateToken()
 	cfg := fmt.Sprintf(`game: %s
 image: %s
 min_instances: %d
@@ -30,7 +32,8 @@ udp_listen_addr: 0.0.0.0:9000
 http_listen_addr: :8080
 mode: sdk
 cloud_provider: gcp
-`, game, image, minInstances, maxInstances, maxPlayers, port)
+auth_token : %s
+`, game, image, minInstances, maxInstances, maxPlayers, port,token)
 
 	if err := os.WriteFile("config.yaml", []byte(cfg), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "huginn: failed to write config.yaml: %v\n", err)
@@ -52,7 +55,11 @@ func prompt(reader *bufio.Reader, label, def string) string {
 	}
 	return line
 }
-
+func generateToken() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
 func promptInt(reader *bufio.Reader, label string, def int) int {
 	for {
 		s := prompt(reader, label, fmt.Sprintf("%d", def))
@@ -64,3 +71,4 @@ func promptInt(reader *bufio.Reader, label string, def int) int {
 		return n
 	}
 }
+

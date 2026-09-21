@@ -26,10 +26,11 @@ func RunScalingLoop(ctx context.Context, hostPool *HostPool, store *ConfigStore,
 					available++
 				}
 			}
-
-			if available >= cfg.BufferSize || total >= cfg.MaxInstances {
-				continue
-			}
+			if total < cfg.MinInstances {
+} else if available >= cfg.BufferSize || total >= cfg.MaxInstances {
+	continue
+}
+		
 
 			instanceID := fmt.Sprintf("huginn-inst-%d", nextIndex)
 			hostPort := cfg.GamePort + nextIndex
