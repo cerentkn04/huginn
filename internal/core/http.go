@@ -40,6 +40,9 @@ func NewRestServer(ctx context.Context, hostPool *HostPool,  hostRegistry *HostR
 	return &http.Server{Addr: store.Get().HTTPListenAddr, Handler: requireAuth(store.Get().AuthToken, mux)}
 }
 func requireAuth(token string, next http.Handler) http.Handler {
+	if token == "" {
+		log.Fatal("huginn: auth_token is not set in config — refusing to start with no authentication. Run `huginn init` or add auth_token manually.")
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			next.ServeHTTP(w, r)
