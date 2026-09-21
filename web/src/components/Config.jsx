@@ -108,7 +108,7 @@ export default function Config() {
       </div>
 
       <div style={styles.row}>
-        <Field label="Max Players">
+        <Field label="Max Players" hint="Requires a restart to take effect">
           <input
             type="number"
             style={styles.input}
@@ -203,8 +203,8 @@ export default function Config() {
 
       {saved && (
         <div style={styles.success}>
-          Saved — applied immediately. (Image and listen addresses still need a restart.)
-        </div>
+        Saved — applied immediately. (Image, max players, and listen addresses still need a restart.)
+	</div>
       )}
 
       <button
@@ -221,10 +221,11 @@ export default function Config() {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, children , hint }) {
   return (
     <div style={styles.field}>
       <label style={styles.label}>{label}</label>
+      {hint && <div style={styles.hint}>{hint}</div>}
       {children}
     </div>
   );
@@ -266,6 +267,11 @@ const styles = {
     fontWeight: 500,
     fontFamily: "inherit",
   },
+	hint: {
+  fontSize: "11px",
+  color: "#6b7280",
+  marginTop: "4px",
+},
   buttonDisabled: { opacity: 0.5, cursor: "not-allowed" },
   error: {
     color: "#fca5a5",
