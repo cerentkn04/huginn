@@ -102,6 +102,8 @@ func (r *Registry) Heartbeat(id string, playerCount int) {
 
 }
 func (r *Registry) SetState(id string, state InstanceState) {
+		r.mu.Lock()
+	defer r.mu.Unlock()
 	inst, ok := r.instances[id]
 	if !ok {
 		return
