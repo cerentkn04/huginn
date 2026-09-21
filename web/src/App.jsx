@@ -4,17 +4,21 @@ import Fleet from "./components/Fleet";
 import Hosts from "./components/Hosts";
 import Config from "./components/Config";
 
+import Login from "./components/Login";
+import { getToken, authEventSource } from "./auth";
 
 export default function App() {
+ const [loggedIn, setLoggedIn] = useState(!!getToken());
   const [activeTab, setActiveTab] = useState("fleet");
   const [hostFilter, setHostFilter] = useState(null);
   const [instances, setInstances] = useState([]);
   const [status, setStatus] = useState("connecting");
   const [connected, setConnected] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    const es = new EventSource("/api/fleet/stream");
 
+  useEffect(() => {
+    if (!loggedIn) return;
+    const es = authEventSource("/api/fleet/stream");
     es.onopen = () => setConnected(true);
 
     es.onmessage = (event) => {
@@ -43,6 +47,9 @@ export default function App() {
     setActiveTab(tab);
     if (tab !== "fleet") setHostFilter(null);
   };
+  if (!loggedIn) {
+    return <Login onLoggedIn={() => setLoggedIn(true)} />;
+  }
 
   return (
     <div style={styles.layout}>

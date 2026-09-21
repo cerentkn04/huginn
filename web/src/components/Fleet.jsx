@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-
+import { authFetch } from "../auth";
 function HistoryChart({ data }) {
   const containerRef = useRef(null);
   const plotRef = useRef(null);
@@ -104,7 +104,7 @@ const [restartError, setRestartError] = useState(null);
     setLogs("");
     const controller = new AbortController();
 
-    fetch(`/api/servers/logs/${selected.JoinCode}`, { signal: controller.signal })
+      authFetch(`/api/servers/logs/${selected.JoinCode}`, { signal: controller.signal })
       .then((res) => {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -135,10 +135,10 @@ const [restartError, setRestartError] = useState(null);
     setStopping(true);
     setStopError(null);
     try {
-      const res = await fetch(`/api/servers/stop/${id}`, { method: "POST" });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text.trim() || `HTTP ${res.status}`);
+      const res = await   await authFetch(`/api/servers/stop/${id}`, { method: "POST" });
+	if (!res.ok) {
+        	const text = await res.text();
+        	throw new Error(text.trim() || `HTTP ${res.status}`);
       }
       setSelectedId(null);
       setConfirmingStop(false);
@@ -152,7 +152,7 @@ const handleRestart = async (id) => {
   setRestarting(true);
   setRestartError(null);
   try {
-    const res = await fetch(`/api/servers/restart/${id}`, { method: "POST" });
+    const res = await authFetch(`/api/servers/restart/${id}`, { method: "POST" });
     if (!res.ok) {
       const text = await res.text();
       throw new Error(text.trim() || `HTTP ${res.status}`);

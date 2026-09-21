@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-
+import { authFetch } from "../auth";
 export default function Config() {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -9,7 +9,7 @@ export default function Config() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    fetch("/api/config")
+    authFetch("/api/config")
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -30,7 +30,7 @@ export default function Config() {
     setSaveError(null);
     setSaved(false);
     try {
-      const res = await fetch("/api/config", {
+      const res = await authFetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),

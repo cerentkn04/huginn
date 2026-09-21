@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-
+import { authEventSource } from "../auth";
 const stateColors = {
   ready: "#4ade80",
   starting: "#facc15",
@@ -12,7 +12,7 @@ export default function Hosts({ onSelectHost }) {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const es = new EventSource("/api/hosts/stream");
+	  const es = authEventSource("/api/hosts/stream");
 
     es.onmessage = (event) => {
       try {

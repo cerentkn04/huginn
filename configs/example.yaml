@@ -15,3 +15,4 @@ firewall_manage: true
 gcp_project: project-79591f24-2c6a-498e-8b3
 gcp_zone: us-central1-a
 host_scale_up_threshold_percent: 90.0
+auth_token: 926cc82054d8ed0bfd8dc72532cff55f20dcf54644ba219b25a06d15e17aa88c
