@@ -217,7 +217,15 @@ const handleRestart = async (id) => {
   </div>
 )}
           {!selected ? (
-            <div style={styles.placeholder}>Select an instance to view details</div>
+  <div style={styles.placeholder}>
+    {!loaded
+      ? "Connecting…"
+      : displayedInstances.length === 0
+      ? hostFilter
+        ? `No instances running on ${hostFilter}.`
+        : "No instances running yet. Check your config's min_instances, or wait for the fleet to start."
+      : "Select an instance to view details"}
+  </div>		  
           ) : (
             <div>
               <div style={styles.detailHeader}>
