@@ -57,7 +57,12 @@ func (p *HostPool) Remove(hostID string) {
 		}
 	}
 }
-
+func (p *HostPool) Has(hostID string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	_, ok := p.hosts[hostID]
+	return ok
+}
 func (p *HostPool) HostIDs() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
-
+	"google.golang.org/api/iterator"
 	compute "cloud.google.com/go/compute/apiv1"
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	"google.golang.org/protobuf/proto"
@@ -137,4 +137,36 @@ func InternalIP(inst *computepb.Instance) string {
 		}
 	}
 	return ""
+}
+func ListManagedHosts(ctx context.Context, projectID, zone string) ([]*computepb.Instance, error) {
+	instancesClient, err := compute.NewInstancesRESTClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gcp: creating instances client: %w", err)
+	}
+	defer instancesClient.Close()
+
+	req := &computepb.ListInstancesRequest{
+		Project: projectID,
+		Zone:    zone,
+	}
+
+	var results []*computepb.Instance
+	it := instancesClient.List(ctx, req)
+	for {
+		inst, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("gcp: listing instances: %w", err)
+		}
+		tags := inst.GetTags().GetItems()
+		for _, tag := range tags {
+			if tag == "huginn-managed" {
+				results = append(results, inst)
+				break
+			}
+		}
+	}
+	return results, nil
 }

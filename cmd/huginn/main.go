@@ -64,6 +64,20 @@ func main() {
 	defer cli.Close()
 	hostPool := core.NewHostPool()
 	hostPool.Add("gamegin", cli)
+	go func() {
+		hosts, err := core.ListManagedHosts(ctx, cfg.GCPProject, cfg.GCPZone)
+		if err != nil {
+			log.Printf("huginn: could not check for orphaned hosts: %v", err)
+			return
+		}
+		for _, h := range hosts {
+			name := h.GetName()
+			if name == "" || hostPool.Has(name) {
+				continue
+			}
+			log.Printf("huginn: WARNING — found orphaned GCP host %q (not known to this huginn instance) — it may be costing money with nothing managing it. Delete manually if unwanted: gcloud compute instances delete %s --zone=%s", name, name, cfg.GCPZone)
+		}
+	}()
 	hostRegistry := core.NewHostRegistry()
 
 	log.Printf("huginn: pulling image %s", cfg.Image)
