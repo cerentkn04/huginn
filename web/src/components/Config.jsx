@@ -175,7 +175,30 @@ export default function Config() {
           <option value="custom">Custom</option>
         </select>
       </Field>
-
+<Field label="GCP Project ID">
+  <input
+    style={styles.input}
+    value={config.gcp_project || ""}
+    onChange={(e) => handleChange("gcp_project", e.target.value)}
+  />
+</Field>
+<Field label="GCP Zone">
+  <input
+    style={styles.input}
+    value={config.gcp_zone || ""}
+    onChange={(e) => handleChange("gcp_zone", e.target.value)}
+  />
+</Field>
+<Field label="Host Auto-Scaling" hint="Off by default — enabling this lets Huginn automatically create new GCP hosts when existing capacity is exhausted, which can incur real cloud costs.">
+  <label style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fff" }}>
+    <input
+      type="checkbox"
+      checked={!!config.host_auto_scaling_enabled}
+      onChange={(e) => handleChange("host_auto_scaling_enabled", e.target.checked)}
+    />
+    Enable automatic host scaling
+  </label>
+</Field>
       {config.cloud_provider === "custom" && (
         <Field label="Public Host">
           <input

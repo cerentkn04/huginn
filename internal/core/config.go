@@ -26,6 +26,7 @@ type Config struct {
 	FirewallManage   bool   `yaml:"firewall_manage" json:"firewall_manage"`
 	GCPProject      string `yaml:"gcp_project" json:"gcp_project"`
 	GCPZone         string `yaml:"gcp_zone" json:"gcp_zone"`
+	HostAutoScalingEnabled bool `yaml:"host_auto_scaling_enabled" json:"host_auto_scaling_enabled"`
 	HostScaleUpThreshold float64 `yaml:"host_scale_up_threshold_percent" json:"host_scale_up_threshold_percent"`
 	AuthToken string `yaml:"auth_token" json:"-"` 
 

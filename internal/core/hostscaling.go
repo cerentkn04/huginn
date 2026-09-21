@@ -59,6 +59,9 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
 			mu.Unlock()
 
 			cfg := store.Get()
+			if !cfg.HostAutoScalingEnabled {
+				continue
+			}
 			results, err := GetPoolUtilization(ctx, hostPool)
 			if err != nil {
 				log.Printf("huginn: host-scaling: utilization check failed: %v", err)
