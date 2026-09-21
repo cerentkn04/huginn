@@ -33,6 +33,7 @@ func NewRestServer(ctx context.Context, hostPool *HostPool,  hostRegistry *HostR
 	LogFleetStream(mux, reg,hostPool)
 	ApiConfig(mux, store, reg)
 	ApiHosts(mux, hostRegistry)
+	ApiCreateHost(mux, ctx, hostPool, hostRegistry, store)
 	ApiHostsStream(mux, hostRegistry)
 	if err := ServeDashboard(mux); err != nil {
 		log.Printf("huginn: dashboard unavailable: %v", err)
@@ -135,6 +136,27 @@ func ApiServers(mux *http.ServeMux, reg *Registry) {
 		json.NewEncoder(w).Encode(reg.All())
 	})
 
+}
+func ApiCreateHost(mux *http.ServeMux, ctx context.Context, hostPool *HostPool, hostRegistry *HostRegistry, store *ConfigStore) {
+	mux.HandleFunc("/api/hosts/create", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		cfg := store.Get()
+		if cfg.GCPProject == "" || cfg.GCPZone == "" {
+			http.Error(w, "GCP project/zone not configured", http.StatusBadRequest)
+			return
+		}
+		newHostID := fmt.Sprintf("huginn-host-%d", time.Now().Unix())
+		go func() {
+			if err := ProvisionHost(ctx, hostPool, hostRegistry, cfg, newHostID); err != nil {
+				log.Printf("huginn: manual host create: %v", err)
+			}
+		}()
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]string{"hostID": newHostID, "status": "provisioning"})
+	})
 }
 func ApiStop(mux *http.ServeMux, ctx context.Context, hostPool *HostPool, reg *Registry) {
 	mux.HandleFunc("/api/servers/stop/", func(w http.ResponseWriter, r *http.Request) {
@@ -252,7 +274,6 @@ func ApiHosts(mux *http.ServeMux, hostRegistry *HostRegistry) {
 		json.NewEncoder(w).Encode(hostRegistry.All())
 	})
 }
-
 func ApiHostsStream(mux *http.ServeMux, hostRegistry *HostRegistry) {
 	mux.HandleFunc("/api/hosts/stream", func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)

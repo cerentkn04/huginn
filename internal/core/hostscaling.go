@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"sync"
 	"time"
-
+	"os"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 )
@@ -25,11 +25,10 @@ type HostUtilization struct {
 func hostNeedsRelief(u HostUtilization, threshold float64) bool {
 	return u.CPUPercent > threshold || u.MemoryPercent > threshold
 }
-
 func waitForSSH(hostID, zone string) error {
 	for i := 0; i < 30; i++ {
 		time.Sleep(10 * time.Second)
-		cmd := exec.Command("gcloud", "compute", "ssh", hostID, "--zone="+zone, "--command=cat /tmp/huginn-provision-done")
+		cmd := exec.Command("gcloud", "compute", "ssh", hostID, "--zone="+zone, "--ssh-key-file="+os.Getenv("HOME")+"/.ssh/huginn_automation_key", "--command=cat /tmp/huginn-provision-done")
 		if out, err := cmd.CombinedOutput(); err == nil {
 			return nil
 		} else if i == 29 {
@@ -38,7 +37,53 @@ func waitForSSH(hostID, zone string) error {
 	}
 	return fmt.Errorf("unreachable")
 }
+func ProvisionHost(ctx context.Context, hostPool *HostPool, hostRegistry *HostRegistry, cfg Config, newHostID string) error {
+	log.Printf("huginn: provisioning new host %s...", newHostID)
+	hostRegistry.SetState(newHostID, HostStateStarting)
 
+	inst, err := CreateHost(ctx, cfg.GCPProject, cfg.GCPZone, newHostID)
+	if err != nil {
+		hostRegistry.Remove(newHostID)
+		return fmt.Errorf("failed to create host: %w", err)
+	}
+	ip := InternalIP(inst)
+
+	certsDir := "certs"
+	caCertPath := certsDir + "/ca.pem"
+	caKeyPath := certsDir + "/ca-key.pem"
+
+	if err := waitForSSH(newHostID, cfg.GCPZone); err != nil {
+		hostRegistry.Remove(newHostID)
+		return fmt.Errorf("host never became ready: %w", err)
+	}
+
+	certPEM, keyPEM, err := GenerateServerCert(caCertPath, caKeyPath, ip)
+	if err != nil {
+		hostRegistry.Remove(newHostID)
+		return fmt.Errorf("cert generation failed: %w", err)
+	}
+	if err := SetupRemoteTLS(cfg.GCPZone, newHostID, caCertPath, certPEM, keyPEM); err != nil {
+		hostRegistry.Remove(newHostID)
+		return fmt.Errorf("TLS setup failed: %w", err)
+	}
+
+	clientCertPath := certsDir + "/client-cert.pem"
+	clientKeyPath := certsDir + "/client-key.pem"
+	cli, err := client.NewClientWithOpts(
+		client.WithHost(fmt.Sprintf("tcp://%s:2376", ip)),
+		client.WithTLSClientConfig(caCertPath, clientCertPath, clientKeyPath),
+		client.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		hostRegistry.Remove(newHostID)
+		return fmt.Errorf("docker client failed: %w", err)
+	}
+
+	hostPool.Add(newHostID, cli)
+	hostRegistry.SetState(newHostID, HostStateReady)
+	log.Printf("huginn: host %s ready and added to pool", newHostID)
+	return nil
+}
 func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *HostRegistry,store *ConfigStore, interval time.Duration) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -54,10 +99,15 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
 			mu.Lock()
 			if provisioning {
 				mu.Unlock()
-				continue
+							continue
 			}
 			mu.Unlock()
-
+			starting := 0
+			for _, h := range hostRegistry.All() {
+				if h.State == HostStateStarting {starting++}
+			}
+			if starting > 0 {continue}
+		
 			cfg := store.Get()
 			if !cfg.HostAutoScalingEnabled {
 				continue
@@ -93,8 +143,6 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
 			mu.Lock()
 			provisioning = true
 			mu.Unlock()
-
-						
 			go func() {
 				defer func() {
 					mu.Lock()
@@ -102,57 +150,13 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
 					mu.Unlock()
 				}()
 				log.Printf("huginn: host-scaling: all hosts over threshold, provisioning a new host...")
-
 				newHostID := fmt.Sprintf("huginn-host-%d", time.Now().Unix())
-				hostRegistry.SetState(newHostID, HostStateStarting)
-
-				inst, err := CreateHost(ctx, cfg.GCPProject, cfg.GCPZone, newHostID)
-				if err != nil {
-					log.Printf("huginn: host-scaling: failed to create host: %v", err)
-					hostRegistry.Remove(newHostID)
-					return
+				if err := ProvisionHost(ctx, hostPool, hostRegistry, cfg, newHostID); err != nil {
+					log.Printf("huginn: host-scaling: %v", err)
 				}
-				ip := InternalIP(inst)
-
-				certsDir := "certs"
-				caCertPath := certsDir + "/ca.pem"
-				caKeyPath := certsDir + "/ca-key.pem"
-
-				if err := waitForSSH(newHostID, cfg.GCPZone); err != nil {
-					log.Printf("huginn: host-scaling: host never became ready: %v", err)
-					hostRegistry.Remove(newHostID)
-					return
-				}
-
-				certPEM, keyPEM, err := GenerateServerCert(caCertPath, caKeyPath, ip)
-				if err != nil {
-					log.Printf("huginn: host-scaling: cert generation failed: %v", err)
-					hostRegistry.Remove(newHostID)
-					return
-				}
-				if err := SetupRemoteTLS(cfg.GCPZone, newHostID, caCertPath, certPEM, keyPEM); err != nil {
-					log.Printf("huginn: host-scaling: TLS setup failed: %v", err)
-					hostRegistry.Remove(newHostID)
-					return
-				}
-
-				clientCertPath := certsDir + "/client-cert.pem"
-				clientKeyPath := certsDir + "/client-key.pem"
-				cli, err := client.NewClientWithOpts(
-					client.WithHost(fmt.Sprintf("tcp://%s:2376", ip)),
-					client.WithTLSClientConfig(caCertPath, clientCertPath, clientKeyPath),
-					client.WithAPIVersionNegotiation(),
-				)
-				if err != nil {
-					log.Printf("huginn: host-scaling: docker client failed: %v", err)
-					hostRegistry.Remove(newHostID)
-					return
-				}
-
-				hostPool.Add(newHostID, cli)
-				hostRegistry.SetState(newHostID, HostStateReady)
-				log.Printf("huginn: host-scaling: new host %s ready and added to pool", newHostID)
 			}()
+						
+
 		}
 	}
 }

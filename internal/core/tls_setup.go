@@ -98,14 +98,15 @@ func SetupRemoteTLS(zone, instanceName string, caCertPath string, serverCertPEM,
 		return fmt.Errorf("writing temp key: %w", err)
 	}
 	tmpKey.Close()
-scpArgs := []string{
-    caCertPath,
-    tmpCert.Name(),
-    tmpKey.Name(),
-    fmt.Sprintf("%s:/tmp/", instanceName),
-    "--zone=" + zone,
-}
 
+scpArgs := []string{
+	caCertPath,
+	tmpCert.Name(),
+	tmpKey.Name(),
+	fmt.Sprintf("%s:/tmp/", instanceName),
+	"--zone=" + zone,
+	"--ssh-key-file=" + os.Getenv("HOME") + "/.ssh/huginn_automation_key",
+}
 	if out, err := exec.Command("gcloud", append([]string{"compute", "scp"}, scpArgs...)...).CombinedOutput(); err != nil {
 		return fmt.Errorf("scp to %s failed: %w\n%s", instanceName, err, out)
 	}
@@ -125,8 +126,7 @@ CONFEOF
 sudo systemctl daemon-reload
 sudo systemctl restart docker
 `, baseName(caCertPath), tmpCert.Name()[len("/tmp/"):], tmpKey.Name()[len("/tmp/"):])
-
-	sshArgs := []string{"compute", "ssh", instanceName, "--zone=" + zone, "--command=" + remoteScript}
+sshArgs := []string{"compute", "ssh", instanceName, "--zone=" + zone, "--ssh-key-file=" + os.Getenv("HOME") + "/.ssh/huginn_automation_key", "--command=" + remoteScript}
 		cmd := exec.Command("gcloud", sshArgs...)
 cmd.Stdin = os.Stdin
 cmd.Stdout = os.Stdout
