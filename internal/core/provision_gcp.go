@@ -47,7 +47,7 @@ func CreateHost(ctx context.Context, projectID, zone, name string) (*computepb.I
 			},
 			ServiceAccounts: []*computepb.ServiceAccount{
 				{
-					Email: proto.String("1062447746316-compute@developer.gserviceaccount.com"),
+					Email: proto.String("default"),
 					Scopes: []string{
 						"https://www.googleapis.com/auth/cloud-platform",
 					},

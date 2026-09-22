@@ -49,7 +49,7 @@ auth_token: %s
 		fmt.Fprintf(os.Stderr, "huginn: failed to write config.yaml: %v\n", err)
 		os.Exit(1)
 	}
-		fmt.Println("Wrote config.yaml — run `huginn start config.yaml` to launch your fleet.")
+	fmt.Println("Wrote config.yaml — run `huginn start config.yaml` to launch your fleet.")
 
 	writeSystemdUnit(reader, game)
 }
@@ -79,8 +79,9 @@ func promptCloudSetup(reader *bufio.Reader) (provider, project, zone, publicHost
 		}
 		fmt.Println("invalid zone format — expected something like us-central1-a")
 	}
-
-	fmt.Println("Note: this only validates the format of what you entered — it does not check GCP credentials or create anything. Host auto-scaling stays OFF by default; enable it later in the Config UI when you're ready.")
+	fmt.Println("Project ID and zone were only format-checked. The next step is optional and makes real changes to your GCP project.")
+	promptGCPAutomatedSetup(reader, project)
+	fmt.Println("Host auto-scaling stays OFF by default; enable it later in the Config UI.")
 	return "gcp", project, zone, "", true
 }
 
@@ -160,7 +161,12 @@ func writeSystemdUnit(reader *bufio.Reader, game string) {
 			fmt.Fprintf(os.Stderr, "huginn: could not determine working directory: %v\n", err)
 			return
 		}
-		binPath := filepath.Join(cwd, "huginn")
+		binPath, err := os.Executable()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "huginn: could not locate huginn binary: %v\n", err)
+			return
+		}
+		binPath, _ = filepath.EvalSymlinks(binPath)
 		configPath := filepath.Join(cwd, "config.yaml")
 		user := os.Getenv("USER")
 		if user == "" {
@@ -196,6 +202,13 @@ WantedBy=multi-user.target
 		fmt.Printf("Wrote %s\n", unitPath)
 
 		if promptYesNo(reader, "Install and enable it now via sudo? (requires sudo privileges)", false) {
+			if _, err := os.Stat("/etc/systemd/system/huginn.service"); err == nil {
+				fmt.Println("Warning: /etc/systemd/system/huginn.service already exists and will be replaced.")
+				if !promptYesNo(reader, "Overwrite it?", false) {
+					fmt.Println("Skipped install.")
+					return
+				}
+			}
 			installSystemdUnit(unitPath)
 		} else {
 			fmt.Printf(`To install it later, run:
