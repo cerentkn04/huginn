@@ -10,12 +10,16 @@ import (
 type HostPool struct {
 	mu    sync.RWMutex
 	hosts map[string]*client.Client
+	publicIPs map[string]string
 	order   []string
 	nextIdx int
 }
 
 func NewHostPool() *HostPool {
-	return &HostPool{hosts: make(map[string]*client.Client)}
+	return &HostPool{
+		hosts: make(map[string]*client.Client),
+		publicIPs: make(map[string]string),
+	}
 }
 
 func (p *HostPool) Add(hostID string, cli *client.Client) {
@@ -71,4 +75,20 @@ func (p *HostPool) HostIDs() []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+func (p *HostPool) SetPublicIP(hostID, ip string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.publicIPs[hostID] = ip
+}
+
+func (p *HostPool) GetPublicIP(hostID string) (string, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	ip, ok := p.publicIPs[hostID]
+	if !ok || ip == "" {
+		return "", fmt.Errorf("hostpool: no public IP known for host %q", hostID)
+	}
+	return ip, nil
 }

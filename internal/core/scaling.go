@@ -49,7 +49,13 @@ func RunScalingLoop(ctx context.Context, hostPool *HostPool, store *ConfigStore,
 				continue
 			}
 			nextIndex++
-			address := fmt.Sprintf("%s:%d", cfg.PublicHost, hostPort)
+			publicIP, err := hostPool.GetPublicIP(hostID)
+			if err != nil{
+				log.Printf("huginn: scale-up:%v = falling back to cfg.PublicHost", err)
+				publicIP = cfg.PublicHost
+			}
+			address := fmt.Sprintf("%s:%d", publicIP, hostPort)
+
 			reg.Register(instanceID, containerID, hostID, address, cfg.MaxPlayers)
 			log.Printf("huginn: scaled up: started instance %s on host port %d (container %s)", instanceID, hostPort, containerID[:12])
 			go EnsureFirewall(ctx, cfg)

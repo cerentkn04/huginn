@@ -1,9 +1,9 @@
 game: huginn-fps-demo
 image: us-central1-docker.pkg.dev/project-79591f24-2c6a-498e-8b3/huginn-images/hugin-server:latest
-min_instances: 10
-max_instances: 30
-buffer_size: 3
-max_players: 3
+min_instances: 1
+max_instances: 3
+buffer_size: 1
+max_players: 2
 port: 7778
 udp_listen_addr: 0.0.0.0:9000
 http_listen_addr: :8080

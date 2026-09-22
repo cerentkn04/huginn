@@ -47,7 +47,8 @@ func ProvisionHost(ctx context.Context, hostPool *HostPool, hostRegistry *HostRe
 		return fmt.Errorf("failed to create host: %w", err)
 	}
 	ip := InternalIP(inst)
-
+	externalIP := ExternalIP(inst)
+	hostPool.SetPublicIP(newHostID, externalIP)
 	certsDir := "certs"
 	caCertPath := certsDir + "/ca.pem"
 	caKeyPath := certsDir + "/ca-key.pem"
@@ -77,6 +78,10 @@ func ProvisionHost(ctx context.Context, hostPool *HostPool, hostRegistry *HostRe
 	if err != nil {
 		hostRegistry.Remove(newHostID)
 		return fmt.Errorf("docker client failed: %w", err)
+	}
+	if err := PullImage(ctx, cli, cfg.Image);err != nil{
+	 hostRegistry.Remove(newHostID)
+	 return fmt.Errorf("image pull failed: %w",err)
 	}
 
 	hostPool.Add(newHostID, cli)

@@ -86,6 +86,7 @@ func main() {
 	}
 	cfg.InternalHost = core.DiscoverInternalHost(cfg)
 		if cfg.InternalHost == "" {
+			hostPool.SetPublicIP("gamegin", cfg.PublicHost)
 		log.Println("huginn: WARNING: could not determine internal host address; sidecar heartbeats may fail")
 	}
 	cfg.PublicHost = core.DiscoverPublicHost(cfg)
@@ -102,11 +103,16 @@ if err != nil {
 adopted := make(map[string]bool)
 for _, dh := range discoveredHosts {
 	for _, c := range dh.Containers {
-		id, containerID, address, ok := core.InstanceFromContainer(c, cfg, cfg.PublicHost)
-		if !ok {
-			continue
-		}
-		reg.Register(id, containerID, dh.HostID, address, cfg.MaxPlayers)
+		publicIP, err := hostPool.GetPublicIP(dh.HostID)
+if err != nil {
+	log.Printf("huginn: adoption: %v — falling back to cfg.PublicHost", err)
+	publicIP = cfg.PublicHost
+}
+id, containerID, address, ok := core.InstanceFromContainer(c, cfg, publicIP)
+if !ok {
+	continue
+}
+reg.Register(id, containerID, dh.HostID, address, cfg.MaxPlayers)
 		adopted[id] = true
 		log.Printf("huginn: adopted existing instance %s on host %s (container %s)", id, dh.HostID, containerID[:12])
 	}
@@ -136,8 +142,13 @@ for i := 0; i < cfg.MinInstances; i++ {
 		}
 		os.Exit(1)
 	}
-	address := fmt.Sprintf("%s:%d", cfg.PublicHost, hostPort)
-	reg.Register(instanceID, containerID,hostID, address, cfg.MaxPlayers)
+	publicIP, err := hostPool.GetPublicIP(hostID)
+if err != nil {
+	log.Printf("huginn: %v — falling back to cfg.PublicHost", err)
+	publicIP = cfg.PublicHost
+}
+address := fmt.Sprintf("%s:%d", publicIP, hostPort)
+reg.Register(instanceID, containerID, hostID, address, cfg.MaxPlayers)
 	log.Printf("huginn: started instance %s on host port %d (container %s)", instanceID, hostPort, containerID[:12])
 }
 		
