@@ -1,64 +1,153 @@
 # Huginn
 
-A lightweight game server fleet manager for indie and small game studios — think **"Agones without Kubernetes."**
+**A lightweight game server fleet manager for indie and small studios — "Agones without Kubernetes."**
 
-Huginn takes a YAML config describing your dedicated server, spins up instances as Docker containers, tracks their health and player counts via heartbeats, and auto-scales up or down within limits you set. It can also run across multiple machines and provision new ones automatically as load grows — no Kubernetes cluster, no manual server management, just Docker and a single binary.
+Huginn runs your dedicated game servers as Docker containers, tracks their health and player counts through heartbeats, and scales them up and down automatically. When a machine fills up, it provisions a new one on Google Cloud; when a machine sits idle, it removes it. One Go binary, one YAML file, no Kubernetes cluster.
 
+> Huginn currently supports **Google Cloud Platform** only.
+
+---
+
+## Why
+
+Small studios shipping a multiplayer game usually end up choosing between two bad options:
+
+- **Manual management** — SSH into a VPS, start servers by hand. Doesn't scale, easy to break.
+- **Heavyweight platforms** — Agones needs a Kubernetes cluster to run and maintain; GameLift and PlayFab lock you into one vendor's hosted service.
+
+Huginn sits in between: Docker-based, self-hosted on your own cloud project, and small enough to understand end to end.
+
+---
+
+## Features
+
+**Fleet management**
+- Config-driven: describe your fleet in YAML, or let `huginn init` generate it
+- Every game server instance is a Docker container
+- Instance-level auto-scaling within your `min_instances` / `max_instances` and buffer settings
+- Unhealthy instances (missed heartbeats) are detected and replaced
+- Join codes and quick-join for clients
+
+**Multi-host & cloud scaling (GCP)**
+- Manages multiple machines at once, placing instances across hosts round-robin
+- **Scale-up:** when every host is over the CPU/memory threshold, Huginn creates a new VM, installs Docker, sets up TLS, pulls your image, and adds it to the pool — fully unattended
+- **Scale-down:** hosts idle (zero instances) for a configurable time are drained and deleted
+- **Self-healing:** hosts deleted outside Huginn are detected and removed, whether mid-provisioning or already running
+- **Startup reconciliation:** after a crash or restart, Huginn re-adopts running containers and flags leftover VMs
+- Firewall rules kept in sync with the ports actually in use
+- The primary host is never scaled down; host auto-scaling is **off by default** so configuring GCP never causes surprise billing
+
+**Dashboard**
+- Token-authenticated web UI on port `8080`
+- **Fleet:** live instances, player counts, addresses, join codes, live log streaming, player-history chart, restart/stop
+- **Hosts:** per-host CPU and memory gauges and instance counts, with drill-down into that host's instances
+- **Config:** most settings apply live, without a restart
+
+**Setup automation**
+- `install.sh` checks prerequisites, builds, and launches setup
+- `huginn init` generates your config and auth token, and can optionally:
+  - enable the required GCP APIs, grant IAM roles, and register an SSH key for provisioning
+  - generate and install a systemd service so Huginn survives crashes and reboots
+
+Every automated step asks first, shows what it will change, and is safe to re-run.
+
+---
+
+## How it works
+
+```mermaid
+flowchart LR
+    Client["Game client<br/>(HuginnClient.cs)"]
+    subgraph Primary["Primary VM"]
+        Core["Huginn core<br/>API + dashboard :8080<br/>heartbeats UDP :9000"]
+        G1["Game server<br/>containers"]
+    end
+    subgraph Extra["Auto-provisioned VMs"]
+        G2["Game server<br/>containers"]
+    end
+    GCP["GCP Compute API"]
+
+    Client -- "1. ask for a server (HTTP)" --> Core
+    Client -- "2. connect directly (UDP)" --> G1
+    Client -. "or" .-> G2
+    G1 -- heartbeats --> Core
+    G2 -- heartbeats --> Core
+    Core -- "Docker API over TLS :2376" --> G2
+    Core -- "create / delete hosts" --> GCP
+```
+
+1. Game servers send heartbeats (player count, health) to Huginn.
+2. A client asks Huginn's API for an available server and gets back a real `ip:port`.
+3. The client connects **directly** to that server — Huginn is never in the game traffic path (the same allocation pattern Agones uses).
+
+---
 
 ## Quickstart
 
-**Requirements:** Docker installed and running, and a dedicated-server Docker image for your game.
+**Before you start**
+- A GCP project with billing enabled
+- A GCE VM to run Huginn, created with the **`cloud-platform` access scope**, with Docker, Go, and the gcloud CLI installed
+- Your game server, integrated with the Huginn SDK, built as a Docker image and pushed to **Artifact Registry** in `us-central1`
+- `gcloud auth login` as a project **owner** (needed only for the automated IAM setup)
 
+**Install**
 ```bash
-# Interactively generate a config
-huginn init
-
-# Start your fleet
-huginn start config.yaml
+git clone <this-repo>
+cd hugin
+./install.sh
 ```
 
-`huginn init` will ask a few questions (game name, image, min/max instances, max players, port) and write a working `config.yaml` — no need to hand-write YAML or guess at field names.
+`install.sh` builds Huginn and runs `huginn init`. Answer the prompts; saying yes to the automated GCP setup and the systemd install means Huginn is running when `init` finishes.
 
-## What it does
+**Open the dashboard** at `http://<vm-public-ip>:8080` and log in with the `auth_token` from `config.yaml`.
 
-- **Config-driven provisioning** — describe your fleet in YAML, spin it up with one command
-- **Docker-based** — each server instance is a container; manage anywhere from 1 to dozens per host
-- **Live dashboard** — a built-in web UI showing:
-  - Real-time fleet overview (instance count, total players, availability)
-  - Per-instance details: address, join code, container ID, health state
-  - **Live log streaming** straight from each container
-  - **Player-count history**, as an interactive time-series chart (hover for exact values, scroll to zoom)
-  - **Restart** and **stop** controls per instance
-- **Auto-scaling** — spins up new instances as players fill existing servers, scales back down when idle, within your configured min/max
-- **Multi-host, with automatic scale-out** — Huginn can manage more than one machine at once, routing new instances across hosts. When configured with cloud credentials, it monitors each host's real CPU/memory usage and automatically provisions a new host — TLS-secured and ready to run containers — when existing capacity is exhausted. Currently supports GCP; more providers planned.
-- **Game-agnostic** — works with any dedicated server binary; integrate via a small SDK or by parsing your server's existing logs
-- **Resilient by design** — if Huginn crashes or restarts, it reconciles with already-running containers across every host instead of colliding with them. Pairs well with a systemd unit (not included — see the deployment notes below) for automatic process recovery.
+**Connect your game** — ship a `huginn.json` next to your client executable:
+```json
+{
+  "huginnBaseUrl": "http://<vm-public-ip>:8080",
+  "huginnToken": "<auth_token from config.yaml>"
+}
+```
+
+➡️ **Full walkthrough, including manual alternatives for every automated step: [GET_STARTED.md](GET_STARTED.md)**
+
+---
 
 ## Example config
 
 ```yaml
 game: my-fps-game
-image: my-server:latest
+image: us-central1-docker.pkg.dev/my-project/my-repo/my-server:latest
 min_instances: 2
 max_instances: 10
+buffer_size: 3
 max_players: 16
 port: 7778
-```
-
-(`huginn init` generates a complete, working version of this for you — the above is illustrative.)
-
-### Multi-host & auto-scaling (optional)
-
-To let Huginn manage more than one machine and provision new hosts automatically, add:
-
-```yaml
-gcp_project: your-gcp-project-id
+gcp_project: my-project
 gcp_zone: us-central1-a
+host_auto_scaling_enabled: false       # opt in from the dashboard when ready
 host_scale_up_threshold_percent: 90
+host_scale_down_idle_minutes: 10
+auth_token: <generated by huginn init>
 ```
 
-This requires one-time cloud setup (IAM roles, a container registry for your game server image, and a generated TLS certificate chain for secure host-to-host connections) — not yet automated by `huginn init`. Single-host use works out of the box with no cloud setup at all.
+---
+
+## Known limitations
+
+- **You build and push your own Docker image** — Huginn does not package game builds.
+- **`max_instances` is fleet-wide**, not per host.
+- **New hosts can only pull from `us-central1` Artifact Registry.**
+- **Huginn itself is a single point of failure.** Running game sessions keep going if it stops, but no new allocations or scaling happen until it's back. Acceptable at the target scale.
+- **One auth token** is shared by the dashboard and game clients.
+- **GCP only** — AWS and bare-metal are not supported.
+
+## Out of scope
+
+Kubernetes support, matchmaking, and billing/cost tooling.
+
+---
 
 ## Status
 
-Huginn is under active development. v1's original scope — single-host provisioning, health tracking, auto-scaling, and an operable dashboard — is done. Since then, multi-host support and automatic host-level scaling (GCP) have landed as well. Not yet in scope: Kubernetes support, matchmaking, and billing/cost tooling. AWS support is planned but not yet implemented.
+Actively developed as a final-year Software Engineering project. Core fleet management, multi-host support, automatic host scaling in both directions, self-healing, authentication, and setup automation are implemented and tested live on GCP.
