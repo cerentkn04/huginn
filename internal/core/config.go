@@ -28,8 +28,8 @@ type Config struct {
 	GCPZone         string `yaml:"gcp_zone" json:"gcp_zone"`
 	HostAutoScalingEnabled bool `yaml:"host_auto_scaling_enabled" json:"host_auto_scaling_enabled"`
 	HostScaleUpThreshold float64 `yaml:"host_scale_up_threshold_percent" json:"host_scale_up_threshold_percent"`
-	AuthToken string `yaml:"auth_token" json:"-"` 
-
+	HostScaleDownIdleMinutes int `yaml:"host_scale_down_idle_minutes" json:"host_scale_down_idle_minutes"`
+	AuthToken string `yaml:"auth_token" json:"-"`
 	path string // where this was loaded from; unexported so it never serializes
 }
 
@@ -44,6 +44,7 @@ func LoadConfig(path string) (Config, error) {
 		HeartbeatTimeout: 15,
 		CloudProvider:    "gcp",
 		FirewallManage:   true,
+		HostScaleDownIdleMinutes: 10,
 	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parsing config: %w", err)

@@ -189,7 +189,7 @@ export default function Config() {
     onChange={(e) => handleChange("gcp_zone", e.target.value)}
   />
 </Field>
-<Field label="Host Auto-Scaling" hint="Off by default — enabling this lets Huginn automatically create new GCP hosts when existing capacity is exhausted, which can incur real cloud costs.">
+	  <Field label="Host Auto-Scaling" hint="Off by default — enabling this lets Huginn automatically create new GCP hosts when existing capacity is exhausted, which can incur real cloud costs.">
   <label style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fff" }}>
     <input
       type="checkbox"
@@ -199,17 +199,16 @@ export default function Config() {
     Enable automatic host scaling
   </label>
 </Field>
-      {config.cloud_provider === "custom" && (
-        <Field label="Public Host">
-          <input
-            style={styles.input}
-            placeholder="e.g. huginn.example.com"
-            value={config.public_host}
-            onChange={(e) => handleChange("public_host", e.target.value)}
-          />
-        </Field>
-      )}
-
+{config.host_auto_scaling_enabled && (
+  <Field label="Scale-Down Idle Threshold (minutes)" hint="A host with zero running instances is removed after being idle this long.">
+    <input
+      type="number"
+      style={styles.input}
+      value={config.host_scale_down_idle_minutes}
+      onChange={(e) => handleChange("host_scale_down_idle_minutes", Number(e.target.value))}
+    />
+  </Field>
+)}
       {errors.length > 0 && (
         <div style={styles.error}>
           {errors.length === 1 ? (

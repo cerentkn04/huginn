@@ -13,12 +13,15 @@ type HostPool struct {
 	publicIPs map[string]string
 	order   []string
 	nextIdx int
+	primaryHostID string
+	draining      map[string]bool
 }
 
 func NewHostPool() *HostPool {
 	return &HostPool{
 		hosts: make(map[string]*client.Client),
 		publicIPs: make(map[string]string),
+		draining:  make(map[string]bool),
 	}
 }
 
@@ -30,6 +33,7 @@ func (p *HostPool) Add(hostID string, cli *client.Client) {
 	}
 	p.hosts[hostID] = cli
 }
+
 
 func (p *HostPool) Get(hostID string) (*client.Client, error) {
 	p.mu.RLock()
@@ -46,14 +50,20 @@ func (p *HostPool) SelectHost() (string, error) {
 	if len(p.order) == 0 {
 		return "", fmt.Errorf("hostpool: no hosts available")
 	}
-	id := p.order[p.nextIdx%len(p.order)]
-	p.nextIdx++
-	return id, nil
+	for i := 0; i < len(p.order); i++ {
+		id := p.order[p.nextIdx%len(p.order)]
+		p.nextIdx++
+		if !p.draining[id] {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("hostpool: no non-draining hosts available")
 }
 func (p *HostPool) Remove(hostID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	delete(p.hosts, hostID)
+	delete(p.draining, hostID)
 	for i, id := range p.order {
 		if id == hostID {
 			p.order = append(p.order[:i], p.order[i+1:]...)
@@ -91,4 +101,27 @@ func (p *HostPool) GetPublicIP(hostID string) (string, error) {
 		return "", fmt.Errorf("hostpool: no public IP known for host %q", hostID)
 	}
 	return ip, nil
+}
+func (p *HostPool) SetPrimary(hostID string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.primaryHostID = hostID
+}
+
+func (p *HostPool) IsPrimary(hostID string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return hostID == p.primaryHostID
+}
+
+func (p *HostPool) SetDraining(hostID string, draining bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.draining[hostID] = draining
+}
+
+func (p *HostPool) IsDraining(hostID string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.draining[hostID]
 }

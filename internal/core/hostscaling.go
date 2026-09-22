@@ -93,8 +93,9 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	var provisioning bool
+	var busy bool
 	var mu sync.Mutex
+	idleSince := make(map[string]time.Time)
 
 	for {
 		select {
@@ -102,9 +103,9 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
 			return ctx.Err()
 		case <-ticker.C:
 			mu.Lock()
-			if provisioning {
+			if busy {
 				mu.Unlock()
-							continue
+				continue
 			}
 			mu.Unlock()
 			starting := 0
@@ -140,26 +141,67 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
 					break
 				}
 			}
-
-			if !allFull {
+			if allFull {
+				mu.Lock()
+				busy = true
+				mu.Unlock()
+				go func() {
+					defer func() {
+						mu.Lock()
+						busy = false
+						mu.Unlock()
+					}()
+					log.Printf("huginn: host-scaling: all hosts over threshold, provisioning a new host...")
+					newHostID := fmt.Sprintf("huginn-host-%d", time.Now().Unix())
+					if err := ProvisionHost(ctx, hostPool, hostRegistry, cfg, newHostID); err != nil {
+						log.Printf("huginn: host-scaling: %v", err)
+					}
+				}()
 				continue
 			}
+			idleThreshold := time.Duration(cfg.HostScaleDownIdleMinutes) * time.Minute
+			if idleThreshold <= 0 {
+				idleThreshold = 10 * time.Minute
+			}
 
+			var drainCandidate string
+			now := time.Now()
+			for _, u := range results {
+				if hostPool.IsPrimary(u.HostID) {
+					continue
+				}
+				if u.InstanceCount == 0 {
+					since, ok := idleSince[u.HostID]
+					if !ok {
+						idleSince[u.HostID] = now
+						continue
+					}
+					if now.Sub(since) >= idleThreshold {
+						drainCandidate = u.HostID
+						break
+					}
+				} else {
+					delete(idleSince, u.HostID)
+				}
+			}
+
+			if drainCandidate == "" {
+				continue
+			}
 			mu.Lock()
-			provisioning = true
+			busy= true
 			mu.Unlock()
-			go func() {
+			go func(hostID string) {
 				defer func() {
 					mu.Lock()
-					provisioning = false
+					busy= false
 					mu.Unlock()
 				}()
-				log.Printf("huginn: host-scaling: all hosts over threshold, provisioning a new host...")
-				newHostID := fmt.Sprintf("huginn-host-%d", time.Now().Unix())
-				if err := ProvisionHost(ctx, hostPool, hostRegistry, cfg, newHostID); err != nil {
-					log.Printf("huginn: host-scaling: %v", err)
+				delete(idleSince, hostID)
+				if err := drainAndRemoveHost(ctx, hostPool, hostRegistry, cfg, hostID); err != nil {
+					log.Printf("huginn: host-scaling: drain %s failed: %v", hostID, err)
 				}
-			}()
+			}(drainCandidate)
 						
 
 		}
@@ -245,4 +287,32 @@ func containerStats(ctx context.Context, cli *client.Client, containerID string)
 
 	memUsedBytes = second.MemoryStats.Usage
 	return cpuPercent, memUsedBytes, nil
+}
+func drainAndRemoveHost(ctx context.Context, hostPool *HostPool, hostRegistry *HostRegistry, cfg Config, hostID string) error {
+	log.Printf("huginn: host-scaling: draining idle host %s...", hostID)
+	hostPool.SetDraining(hostID, true)
+	hostRegistry.SetState(hostID, HostStateDraining)
+
+	cli, err := hostPool.Get(hostID)
+	if err == nil {
+		if util, uerr := GetHostUtilization(ctx, hostID, cli); uerr == nil && util.InstanceCount > 0 {
+			hostPool.SetDraining(hostID, false)
+			hostRegistry.SetState(hostID, HostStateReady)
+			return fmt.Errorf("abandoned drain: host %s picked up %d instance(s) since being marked idle", hostID, util.InstanceCount)
+		}
+	}
+
+	if err := DeleteHost(ctx, cfg.GCPProject, cfg.GCPZone, hostID); err != nil {
+		hostPool.SetDraining(hostID, false)
+		hostRegistry.SetState(hostID, HostStateReady)
+		return fmt.Errorf("failed to delete GCP host: %w", err)
+	}
+
+	if cli != nil {
+		cli.Close()
+	}
+	hostPool.Remove(hostID)
+	hostRegistry.Remove(hostID)
+	log.Printf("huginn: host-scaling: host %s drained and removed", hostID)
+	return nil
 }

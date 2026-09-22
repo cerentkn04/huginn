@@ -64,6 +64,7 @@ func main() {
 	defer cli.Close()
 	hostPool := core.NewHostPool()
 	hostPool.Add("gamegin", cli)
+	hostPool.SetPrimary("gamegin")
 	go func() {
 		hosts, err := core.ListManagedHosts(ctx, cfg.GCPProject, cfg.GCPZone)
 		if err != nil {
