@@ -6,18 +6,7 @@ Huginn runs your dedicated game servers as Docker containers, tracks their healt
 
 > Huginn currently supports **Google Cloud Platform** only.
 
----
 
-## Why
-
-Small studios shipping a multiplayer game usually end up choosing between two bad options:
-
-- **Manual management** — SSH into a VPS, start servers by hand. Doesn't scale, easy to break.
-- **Heavyweight platforms** — Agones needs a Kubernetes cluster to run and maintain; GameLift and PlayFab lock you into one vendor's hosted service.
-
-Huginn sits in between: Docker-based, self-hosted on your own cloud project, and small enough to understand end to end.
-
----
 
 ## Features
 
