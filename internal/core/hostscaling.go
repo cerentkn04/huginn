@@ -25,7 +25,7 @@ type HostUtilization struct {
 func hostNeedsRelief(u HostUtilization, threshold float64) bool {
 	return u.CPUPercent > threshold || u.MemoryPercent > threshold
 }
-func waitForSSH(hostID, zone string) error {
+func waitForSSH(ctx context.Context, projectID, hostID, zone string) error {
 	for i := 0; i < 30; i++ {
 		time.Sleep(10 * time.Second)
 		cmd := exec.Command("gcloud", "compute", "ssh", hostID, "--zone="+zone, "--ssh-key-file="+os.Getenv("HOME")+"/.ssh/huginn_automation_key", "--command=cat /tmp/huginn-provision-done")
@@ -33,6 +33,13 @@ func waitForSSH(hostID, zone string) error {
 			return nil
 		} else if i == 29 {
 			return fmt.Errorf("host never became ready: %v\n%s", err, out)
+		}
+
+		if i%3 == 2 {
+			exists, existsErr := HostExists(ctx, projectID, zone, hostID)
+			if existsErr == nil && !exists {
+				return fmt.Errorf("host %s no longer exists in GCP (deleted externally)", hostID)
+			}
 		}
 	}
 	return fmt.Errorf("unreachable")
@@ -53,7 +60,7 @@ func ProvisionHost(ctx context.Context, hostPool *HostPool, hostRegistry *HostRe
 	caCertPath := certsDir + "/ca.pem"
 	caKeyPath := certsDir + "/ca-key.pem"
 
-	if err := waitForSSH(newHostID, cfg.GCPZone); err != nil {
+	if err := waitForSSH(ctx, cfg.GCPProject, newHostID, cfg.GCPZone); err != nil {
 		hostRegistry.Remove(newHostID)
 		return fmt.Errorf("host never became ready: %w", err)
 	}
@@ -118,12 +125,23 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
 			if !cfg.HostAutoScalingEnabled {
 				continue
 			}
-			results, err := GetPoolUtilization(ctx, hostPool)
-			if err != nil {
-				log.Printf("huginn: host-scaling: utilization check failed: %v", err)
-				continue
-			}
-
+                        results, failed := GetPoolUtilization(ctx, hostPool)
+                        for hostID, ferr := range failed {
+                                log.Printf("huginn: host-scaling: utilization check failed for %s: %v", hostID, ferr)
+                                if hostPool.IsPrimary(hostID) || hostPool.IsDraining(hostID) {
+                                        continue
+                                }
+                                exists, existsErr := HostExists(ctx, cfg.GCPProject, cfg.GCPZone, hostID)
+                                if existsErr == nil && !exists {
+                                        log.Printf("huginn: host-scaling: host %s no longer exists in GCP, cleaning up stale pool entry", hostID)
+                                        if cli, cerr := hostPool.Get(hostID); cerr == nil && cli != nil {
+                                                cli.Close()
+                                        }
+                                        hostPool.Remove(hostID)
+                                        hostRegistry.Remove(hostID)
+                                        delete(idleSince, hostID)
+                                }
+                        }
 			for _, u := range results {
 				hostRegistry.Update(HostInfo{
 					ID:            u.HostID,
@@ -208,20 +226,23 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
 	}
 }
 
-func GetPoolUtilization(ctx context.Context, hostPool *HostPool) ([]HostUtilization, error) {
+func GetPoolUtilization(ctx context.Context, hostPool *HostPool) ([]HostUtilization,  map[string]error) {
 	var results []HostUtilization
+	failed := make(map[string]error)
 	for _, hostID := range hostPool.HostIDs() {
 		cli, err := hostPool.Get(hostID)
 		if err != nil {
+			 failed[hostID] = err
 			continue
 		}
 		util, err := GetHostUtilization(ctx, hostID, cli)
 		if err != nil {
-			return nil, err
+			failed[hostID] = err
+			continue
 		}
 		results = append(results, util)
 	}
-	return results, nil
+	return results, failed
 }
 
 func GetHostUtilization(ctx context.Context, hostID string, cli *client.Client) (HostUtilization, error) {

@@ -3,7 +3,9 @@ package core
 import (
 	"context"
 	"fmt"
+		"errors"
 	"google.golang.org/api/iterator"
+	"google.golang.org/api/googleapi"
 	compute "cloud.google.com/go/compute/apiv1"
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	"google.golang.org/protobuf/proto"
@@ -118,7 +120,24 @@ func DeleteHost(ctx context.Context, projectID, zone, name string) error {
 	}
 	return nil
 }
+func HostExists(ctx context.Context, projectID, zone, name string) (bool, error) {
+	instancesClient, err := compute.NewInstancesRESTClient(ctx)
+	if err != nil {
+		return false, fmt.Errorf("gcp: creating instances client: %w", err)
+	}
+	defer instancesClient.Close()
 
+	req := &computepb.GetInstanceRequest{Project: projectID, Zone: zone, Instance: name}
+	_, err = instancesClient.Get(ctx, req)
+	if err != nil {
+		var apiErr *googleapi.Error
+		if errors.As(err, &apiErr) && apiErr.Code == 404 {
+			return false, nil
+		}
+		return false, fmt.Errorf("gcp: checking instance %s: %w", name, err)
+	}
+	return true, nil
+}
 func ExternalIP(inst *computepb.Instance) string {
 	for _, ni := range inst.GetNetworkInterfaces() {
 		for _, ac := range ni.GetAccessConfigs() {
