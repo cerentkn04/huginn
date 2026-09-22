@@ -22,3 +22,6 @@ certs/*-key.pem
 certs/*.csr
 certs/*.srl
 tmp/
+certs/
+serverBuild.bak.*/
+configs/live.yaml
