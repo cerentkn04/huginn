@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -47,7 +49,9 @@ auth_token: %s
 		fmt.Fprintf(os.Stderr, "huginn: failed to write config.yaml: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("Wrote config.yaml — run `huginn start config.yaml` to launch your fleet.")
+		fmt.Println("Wrote config.yaml — run `huginn start config.yaml` to launch your fleet.")
+
+	writeSystemdUnit(reader, game)
 }
 
 func promptCloudSetup(reader *bufio.Reader) (provider, project, zone, publicHost string, firewallManage bool) {
@@ -148,4 +152,86 @@ func promptInt(reader *bufio.Reader, label string, def int) int {
 		}
 		return n
 	}
+}
+func writeSystemdUnit(reader *bufio.Reader, game string) {
+	if promptYesNo(reader, "Generate a systemd service file for this fleet?", true) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "huginn: could not determine working directory: %v\n", err)
+			return
+		}
+		binPath := filepath.Join(cwd, "huginn")
+		configPath := filepath.Join(cwd, "config.yaml")
+		user := os.Getenv("USER")
+		if user == "" {
+			user = os.Getenv("LOGNAME")
+		}
+		if user == "" {
+			fmt.Println("Could not determine current user — skipping systemd unit generation. You can create it manually.")
+			return
+		}
+
+		unit := fmt.Sprintf(`[Unit]
+Description=Huginn fleet manager (%s)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=%s
+ExecStart=%s start %s
+Restart=on-failure
+RestartSec=5
+User=%s
+
+[Install]
+WantedBy=multi-user.target
+`, game, cwd, binPath, configPath, user)
+
+		unitPath := filepath.Join(cwd, "huginn.service")
+		if err := os.WriteFile(unitPath, []byte(unit), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "huginn: failed to write huginn.service: %v\n", err)
+			return
+		}
+		fmt.Printf("Wrote %s\n", unitPath)
+
+		if promptYesNo(reader, "Install and enable it now via sudo? (requires sudo privileges)", false) {
+			installSystemdUnit(unitPath)
+		} else {
+			fmt.Printf(`To install it later, run:
+  sudo cp %s /etc/systemd/system/huginn.service
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now huginn
+`, unitPath)
+		}
+	}
+}
+
+func installSystemdUnit(unitPath string) {
+	dest := "/etc/systemd/system/huginn.service"
+	cp := exec.Command("sudo", "cp", unitPath, dest)
+	cp.Stdout = os.Stdout
+	cp.Stderr = os.Stderr
+	if err := cp.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "huginn: failed to install unit file: %v\n", err)
+		return
+	}
+
+	reload := exec.Command("sudo", "systemctl", "daemon-reload")
+	reload.Stdout = os.Stdout
+	reload.Stderr = os.Stderr
+	if err := reload.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "huginn: systemctl daemon-reload failed: %v\n", err)
+		return
+	}
+
+	enable := exec.Command("sudo", "systemctl", "enable", "--now", "huginn")
+	enable.Stdout = os.Stdout
+	enable.Stderr = os.Stderr
+	if err := enable.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "huginn: systemctl enable failed: %v\n", err)
+		return
+	}
+
+	fmt.Println("huginn.service installed, enabled, and started.")
 }
