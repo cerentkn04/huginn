@@ -120,22 +120,35 @@ func ApiFleetStream(mux *http.ServeMux, reg *Registry) {
 	})
 }
 
-func writeSnapshot(w http.ResponseWriter, flusher http.Flusher, reg *Registry) error {
-	payload, err := json.Marshal(reg.All())
+
+func ApiServers(mux *http.ServeMux, reg *Registry) {
+	mux.HandleFunc("/api/servers", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(reg.All())
+	})
+
+}
+func writeHostSnapshot(w http.ResponseWriter, flusher http.Flusher, hostRegistry *HostRegistry) error {
+	payload, err := json.Marshal(hostRegistry.All())
 	if err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
 		return err
 	}
+
+	removals := hostRegistry.RecentRemovals(20 * time.Second)
+	if len(removals) > 0 {
+		removalsPayload, err := json.Marshal(removals)
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "event: removed\ndata: %s\n\n", removalsPayload); err != nil {
+			return err
+		}
+	}
+
 	flusher.Flush()
 	return nil
-}
-func ApiServers(mux *http.ServeMux, reg *Registry) {
-	mux.HandleFunc("/api/servers", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(reg.All())
-	})
-
 }
 func ApiCreateHost(mux *http.ServeMux, ctx context.Context, hostPool *HostPool, hostRegistry *HostRegistry, store *ConfigStore) {
 	mux.HandleFunc("/api/hosts/create", func(w http.ResponseWriter, r *http.Request) {
@@ -274,6 +287,20 @@ func ApiHosts(mux *http.ServeMux, hostRegistry *HostRegistry) {
 		json.NewEncoder(w).Encode(hostRegistry.All())
 	})
 }
+func writeSnapshot(w http.ResponseWriter, flusher http.Flusher, reg *Registry) error {
+	payload, err := json.Marshal(reg.All())
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "event: peak\ndata: %d\n\n", reg.SampleFleetPeak()); err != nil {
+		return err
+	}
+	flusher.Flush()
+	return nil
+}
 func ApiHostsStream(mux *http.ServeMux, hostRegistry *HostRegistry) {
 	mux.HandleFunc("/api/hosts/stream", func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
@@ -309,17 +336,6 @@ func ApiHostsStream(mux *http.ServeMux, hostRegistry *HostRegistry) {
 	})
 }
 
-func writeHostSnapshot(w http.ResponseWriter, flusher http.Flusher, hostRegistry *HostRegistry) error {
-	payload, err := json.Marshal(hostRegistry.All())
-	if err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
-		return err
-	}
-	flusher.Flush()
-	return nil
-}
 func ApiConfig(mux *http.ServeMux, store *ConfigStore, reg *Registry) {
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

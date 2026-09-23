@@ -65,11 +65,12 @@ function getGaugeColor(value) {
   return "#4ade80";
 }
 
-export default function Hosts({ onSelectHost }) {
+export default function Hosts({ onSelectHost, instances = [] }) {
   const [hosts, setHosts] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
+  const [toasts, setToasts] = useState([]);
 
   useEffect(() => {
     const es = authEventSource("/api/hosts/stream");
@@ -83,8 +84,29 @@ export default function Hosts({ onSelectHost }) {
       }
     };
 
+    es.addEventListener("removed", (event) => {
+      try {
+        const removals = JSON.parse(event.data);
+        setToasts((prev) => {
+          const existingIds = new Set(prev.map((t) => t.hostID + t.t));
+          const fresh = removals.filter((r) => !existingIds.has(r.hostID + r.t));
+          return [...prev, ...fresh.map((r) => ({ ...r, id: r.hostID + r.t }))];
+        });
+      } catch (err) {
+        console.error("huginn: bad removal event", err);
+      }
+    });
+
     return () => es.close();
   }, []);
+
+  useEffect(() => {
+    if (toasts.length === 0) return;
+    const timer = setTimeout(() => {
+      setToasts((prev) => prev.slice(1));
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [toasts]);
 
   const handleCreateHost = async () => {
     setCreating(true);
@@ -104,8 +126,16 @@ export default function Hosts({ onSelectHost }) {
 
   return (
     <div style={styles.container}>
+
+      <div style={styles.toastContainer}>
+        {toasts.map((t) => (
+          <div key={t.id} style={styles.toast}>
+            <div style={styles.toastTitle}>Host removed: {t.hostID}</div>
+            <div style={styles.toastReason}>{t.reason}</div>
+          </div>
+        ))}
+      </div>
       <div style={styles.headerRow}>
-        <h2 style={styles.heading}>Hosts</h2>
         <button
           style={{
             ...styles.createButton,
@@ -117,6 +147,21 @@ export default function Hosts({ onSelectHost }) {
           {creating ? "Requesting…" : "+ Create Host"}
         </button>
       </div>
+
+      {loaded && hosts.length > 0 && (
+        <div style={styles.summaryRow}>
+          <div style={{ ...styles.statCard, borderLeftColor: "#60a5fa" }}>
+            <div style={styles.statValue}>{hosts.length}</div>
+            <div style={styles.statLabel}>Hosts</div>
+          </div>
+          <div style={{ ...styles.statCard, borderLeftColor: "#4ade80" }}>
+            <div style={styles.statValue}>
+              {hosts.reduce((sum, h) => sum + h.InstanceCount, 0)}
+            </div>
+            <div style={styles.statLabel}>Instances</div>
+          </div>
+        </div>
+      )}
 
       {createError && (
         <div style={styles.error}>Failed to create host: {createError}</div>
@@ -144,6 +189,10 @@ export default function Hosts({ onSelectHost }) {
 
                 <span style={styles.id}>{h.ID}</span>
 
+                {h.IsPrimary && (
+                  <span style={styles.primaryBadge}>Primary</span>
+                )}
+
                 <span style={styles.state}>{h.State}</span>
               </div>
 
@@ -168,6 +217,18 @@ export default function Hosts({ onSelectHost }) {
                   </div>
                 </div>
               </div>
+
+              {instances.filter((i) => i.HostID === h.ID).length > 0 && (
+                <div style={styles.instanceList}>
+                  {instances
+                    .filter((i) => i.HostID === h.ID)
+                    .map((i) => (
+                      <span key={i.ID} style={styles.instanceChip}>
+                        {i.ID} · {i.PlayerCount}/{i.MaxPlayers}
+                      </span>
+                    ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -184,8 +245,9 @@ const styles = {
   headerRow: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     marginBottom: "20px",
+  maxWidth: "620px",
   },
 
   heading: {
@@ -226,6 +288,7 @@ const styles = {
   },
 
   card: {
+  maxWidth: "620px",
     background: "#161b22",
     borderRadius: "8px",
     padding: "16px 20px",
@@ -248,6 +311,18 @@ const styles = {
   id: {
     fontWeight: "bold",
     fontSize: "15px",
+  },
+
+  primaryBadge: {
+    background: "rgba(96, 165, 250, 0.15)",
+    color: "#60a5fa",
+    border: "1px solid rgba(96, 165, 250, 0.35)",
+    borderRadius: "4px",
+    padding: "2px 8px",
+    fontSize: "10px",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
   },
 
   state: {
@@ -293,6 +368,79 @@ const styles = {
 
   instanceLabel: {
     color: "#6b7280",
+    fontSize: "12px",
+  },
+
+  summaryRow: {
+    display: "flex",
+    gap: "16px",
+    marginBottom: "20px",
+    maxWidth: "460px",
+  },
+
+  statCard: {
+    flex: "1 1 0",
+    background: "#161b22",
+    border: "1px solid #21262d",
+    borderLeft: "3px solid #30363d",
+    borderRadius: "8px",
+    padding: "14px 20px",
+    textAlign: "center",
+    color: "#fff",
+  },
+
+  statValue: { fontSize: "22px", fontWeight: "bold" },
+  statLabel: { fontSize: "12px", color: "#9ca3af" },
+
+  instanceList: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "6px",
+    marginTop: "14px",
+    paddingTop: "12px",
+    borderTop: "1px solid #21262d",
+  },
+
+  instanceChip: {
+    background: "#0d1117",
+    border: "1px solid #21262d",
+    borderRadius: "4px",
+    padding: "3px 8px",
+    fontSize: "11px",
+    color: "#8b949e",
+    fontFamily: "ui-monospace, Consolas, monospace",
+  },
+
+  toastContainer: {
+    position: "fixed",
+    bottom: "24px",
+    right: "24px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    zIndex: 1000,
+  },
+
+  toast: {
+    background: "#1c1017",
+    border: "1px solid rgba(248, 113, 113, 0.4)",
+    borderLeft: "3px solid #f87171",
+    borderRadius: "8px",
+    padding: "12px 16px",
+    minWidth: "280px",
+    maxWidth: "360px",
+    boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)",
+  },
+
+  toastTitle: {
+    color: "#fff",
+    fontSize: "13px",
+    fontWeight: "600",
+    marginBottom: "4px",
+  },
+
+  toastReason: {
+    color: "#9ca3af",
     fontSize: "12px",
   },
 };

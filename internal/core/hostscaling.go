@@ -138,14 +138,15 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
                                                 cli.Close()
                                         }
                                         hostPool.Remove(hostID)
-                                        hostRegistry.Remove(hostID)
-                                        delete(idleSince, hostID)
+                                        hostRegistry.RemoveWithReason(hostID, "no longer exists in GCP (deleted externally)")
+					delete(idleSince, hostID)
                                 }
                         }
 			for _, u := range results {
 				hostRegistry.Update(HostInfo{
 					ID:            u.HostID,
 					State:         HostStateReady,
+                                        IsPrimary:     hostPool.IsPrimary(u.HostID),
 					CPUPercent:    u.CPUPercent,
 					MemoryPercent: u.MemoryPercent,
 					InstanceCount: u.InstanceCount,
@@ -246,6 +247,8 @@ func GetPoolUtilization(ctx context.Context, hostPool *HostPool) ([]HostUtilizat
 }
 
 func GetHostUtilization(ctx context.Context, hostID string, cli *client.Client) (HostUtilization, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	info, err := cli.Info(ctx)
 	if err != nil {
 		return HostUtilization{}, fmt.Errorf("host %s: getting docker info: %w", hostID, err)
