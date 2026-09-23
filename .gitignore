@@ -25,3 +25,5 @@ tmp/
 certs/
 serverBuild.bak.*/
 configs/live.yaml
+config.yaml
+huginn.service
