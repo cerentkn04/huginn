@@ -53,18 +53,7 @@ auth_token: %s
 
 	writeSystemdUnit(reader, game)
 }
-
 func promptCloudSetup(reader *bufio.Reader) (provider, project, zone, publicHost string, firewallManage bool) {
-	enableGCP := promptYesNo(reader, "Enable GCP features (host provisioning, firewall management)?", false)
-	if !enableGCP {
-		publicHost = prompt(reader, "Public host/IP for this machine (required without GCP)", "")
-		for publicHost == "" {
-			fmt.Println("public_host is required when GCP features are disabled")
-			publicHost = prompt(reader, "Public host/IP for this machine", "")
-		}
-		return "custom", "", "", publicHost, false
-	}
-
 	for {
 		project = prompt(reader, "GCP project ID", "")
 		if isValidGCPProjectID(project) {

@@ -164,17 +164,6 @@ export default function Config() {
         </select>
       </Field>
 
-      <Field label="Public Host Discovery">
-        <select
-          style={styles.input}
-          value={config.cloud_provider}
-          onChange={(e) => handleChange("cloud_provider", e.target.value)}
-        >
-          <option value="gcp">GCP (auto-detect)</option>
-          <option value="aws">AWS (auto-detect)</option>
-          <option value="custom">Custom</option>
-        </select>
-      </Field>
 <Field label="GCP Project ID">
   <input
     style={styles.input}
