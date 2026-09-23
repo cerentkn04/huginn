@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { authEventSource } from "../auth";
+import { authEventSource, authFetch } from "../auth";
 
 const stateColors = {
   ready: "#4ade80",
@@ -68,9 +68,11 @@ function getGaugeColor(value) {
 export default function Hosts({ onSelectHost }) {
   const [hosts, setHosts] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState(null);
 
   useEffect(() => {
-	  const es = authEventSource("/api/hosts/stream");
+    const es = authEventSource("/api/hosts/stream");
 
     es.onmessage = (event) => {
       try {
@@ -84,9 +86,41 @@ export default function Hosts({ onSelectHost }) {
     return () => es.close();
   }, []);
 
+  const handleCreateHost = async () => {
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const res = await authFetch("/api/hosts/create", { method: "POST" });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text.trim() || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      setCreateError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div style={styles.container}>
-      <h2 style={styles.heading}>Hosts</h2>
+      <div style={styles.headerRow}>
+        <h2 style={styles.heading}>Hosts</h2>
+        <button
+          style={{
+            ...styles.createButton,
+            ...(creating ? styles.buttonDisabled : {}),
+          }}
+          disabled={creating}
+          onClick={handleCreateHost}
+        >
+          {creating ? "Requesting…" : "+ Create Host"}
+        </button>
+      </div>
+
+      {createError && (
+        <div style={styles.error}>Failed to create host: {createError}</div>
+      )}
 
       {!loaded ? (
         <div style={styles.note}>Loading hosts…</div>
@@ -147,9 +181,37 @@ const styles = {
     padding: "24px",
   },
 
+  headerRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: "20px",
+  },
+
   heading: {
     color: "#fff",
-    marginBottom: "20px",
+  },
+
+  createButton: {
+    background: "#238636",
+    color: "#fff",
+    border: "none",
+    borderRadius: "6px",
+    padding: "8px 16px",
+    fontSize: "14px",
+    fontWeight: "600",
+    cursor: "pointer",
+  },
+
+  buttonDisabled: {
+    opacity: 0.6,
+    cursor: "not-allowed",
+  },
+
+  error: {
+    color: "#f87171",
+    marginBottom: "16px",
+    fontSize: "14px",
   },
 
   note: {
@@ -234,5 +296,3 @@ const styles = {
     fontSize: "12px",
   },
 };
-
-
