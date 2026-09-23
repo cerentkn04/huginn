@@ -22,6 +22,7 @@ func runInit() {
 	maxPlayers := promptInt(reader, "Max players per instance", 16)
 	port := promptInt(reader, "Game server UDP port", 7778)
 	token := generateToken()
+	clientToken := generateToken()
 
 	cloudProvider, gcpProject, gcpZone, publicHost, firewallManage := promptCloudSetup(reader)
 
@@ -43,13 +44,19 @@ public_host: %s
 firewall_manage: %t
 host_auto_scaling_enabled: false
 auth_token: %s
-`, game, image, minInstances, maxInstances, maxPlayers, port, cloudProvider, gcpProject, gcpZone, publicHost, firewallManage, token)
+client_auth_token: %s
+`, game, image, minInstances, maxInstances, maxPlayers, port, cloudProvider, gcpProject, gcpZone, publicHost, firewallManage, token, clientToken)
 
 	if err := os.WriteFile("config.yaml", []byte(cfg), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "huginn: failed to write config.yaml: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("Wrote config.yaml — run `huginn start config.yaml` to launch your fleet.")
+	fmt.Println()
+	fmt.Println("Two tokens were generated:")
+	fmt.Printf("  auth_token         (admin — dashboard login, full control): %s\n", token)
+	fmt.Printf("  client_auth_token  (players — server discovery only):       %s\n", clientToken)
+	fmt.Println("Put ONLY client_auth_token in huginn.json for your game client. Never ship auth_token to players.")
 
 	writeSystemdUnit(reader, game)
 }

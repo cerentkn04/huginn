@@ -29,6 +29,7 @@ type Config struct {
 	HostAutoScalingEnabled bool `yaml:"host_auto_scaling_enabled" json:"host_auto_scaling_enabled"`
 	HostScaleUpThreshold float64 `yaml:"host_scale_up_threshold_percent" json:"host_scale_up_threshold_percent"`
 	HostScaleDownIdleMinutes int `yaml:"host_scale_down_idle_minutes" json:"host_scale_down_idle_minutes"`
+	ClientAuthToken string `yaml:"client_auth_token" json:"client_auth_token"`
 	AuthToken string `yaml:"auth_token" json:"-"`
 	path string // where this was loaded from; unexported so it never serializes
 }

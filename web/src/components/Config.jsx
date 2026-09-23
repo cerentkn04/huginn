@@ -178,6 +178,22 @@ export default function Config() {
     onChange={(e) => handleChange("gcp_zone", e.target.value)}
   />
 </Field>
+<Field label="Client Auth Token" hint="Read-only, low-privilege token for game clients (server discovery only). Ship this in huginn.json — never the admin auth_token.">
+  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+    <input
+      style={{ ...styles.input, color: "#9ca3af" }}
+      value={config.client_auth_token || ""}
+      readOnly
+    />
+    <button
+      type="button"
+      style={styles.copyButton}
+      onClick={() => navigator.clipboard.writeText(config.client_auth_token || "")}
+    >
+      Copy
+    </button>
+  </div>
+</Field>
 	  <Field label="Host Auto-Scaling" hint="Off by default — enabling this lets Huginn automatically create new GCP hosts when existing capacity is exhausted, which can incur real cloud costs.">
   <label style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fff" }}>
     <input
@@ -302,5 +318,15 @@ const styles = {
     borderRadius: "6px",
     marginBottom: "16px",
     fontSize: "13px",
+  },
+  copyButton: {
+    background: "#1f2937",
+    color: "#ccc",
+    border: "none",
+    padding: "6px 12px",
+    borderRadius: "4px",
+    fontSize: "12px",
+    cursor: "pointer",
+    fontFamily: "inherit",
   },
 };

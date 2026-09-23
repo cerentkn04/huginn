@@ -38,28 +38,7 @@ func NewRestServer(ctx context.Context, hostPool *HostPool,  hostRegistry *HostR
 	if err := ServeDashboard(mux); err != nil {
 		log.Printf("huginn: dashboard unavailable: %v", err)
 	}
-	return &http.Server{Addr: store.Get().HTTPListenAddr, Handler: requireAuth(store.Get().AuthToken, mux)}
-}
-func requireAuth(token string, next http.Handler) http.Handler {
-	if token == "" {
-		log.Fatal("huginn: auth_token is not set in config — refusing to start with no authentication. Run `huginn init` or add auth_token manually.")
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/api/") {
-			next.ServeHTTP(w, r)
-			return
-		}
-		provided := r.Header.Get("Authorization")
-		provided = strings.TrimPrefix(provided, "Bearer ")
-		if provided == "" {
-			provided = r.URL.Query().Get("token")
-		}
-		if subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return &http.Server{Addr: store.Get().HTTPListenAddr, Handler: requireAuth(store.Get().AuthToken, store.Get().ClientAuthToken, mux)}
 }
 func ApiAvailable(mux *http.ServeMux, reg *Registry) {
 	mux.HandleFunc("/api/servers/available", func(w http.ResponseWriter, r *http.Request) {
@@ -149,6 +128,44 @@ func writeHostSnapshot(w http.ResponseWriter, flusher http.Flusher, hostRegistry
 
 	flusher.Flush()
 	return nil
+}
+func requireAuth(adminToken, clientToken string, next http.Handler) http.Handler {
+	if adminToken == "" {
+		log.Fatal("huginn: auth_token is not set in config — refusing to start with no authentication. Run `huginn init` or add auth_token manually.")
+	}
+	clientOnlyPaths := []string{
+		"/api/servers/available",
+		"/api/servers/code/",
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		provided := r.Header.Get("Authorization")
+		provided = strings.TrimPrefix(provided, "Bearer ")
+		if provided == "" {
+			provided = r.URL.Query().Get("token")
+		}
+
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(adminToken)) == 1 {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if clientToken != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(clientToken)) == 1 {
+			for _, p := range clientOnlyPaths {
+				if strings.HasPrefix(r.URL.Path, p) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			http.Error(w, "forbidden: client token cannot access this endpoint", http.StatusForbidden)
+			return
+		}
+
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	})
 }
 func ApiCreateHost(mux *http.ServeMux, ctx context.Context, hostPool *HostPool, hostRegistry *HostRegistry, store *ConfigStore) {
 	mux.HandleFunc("/api/hosts/create", func(w http.ResponseWriter, r *http.Request) {

@@ -21,20 +21,22 @@ Huginn runs your dedicated game servers as Docker containers, tracks their healt
 - Manages multiple machines at once, placing instances across hosts round-robin
 - **Scale-up:** when every host is over the CPU/memory threshold, Huginn creates a new VM, installs Docker, sets up TLS, pulls your image, and adds it to the pool — fully unattended
 - **Scale-down:** hosts idle (zero instances) for a configurable time are drained and deleted
-- **Self-healing:** hosts deleted outside Huginn are detected and removed, whether mid-provisioning or already running
+- **Self-healing:** hosts deleted outside Huginn are detected and removed, whether mid-provisioning or already running, with a dashboard notification explaining why
 - **Startup reconciliation:** after a crash or restart, Huginn re-adopts running containers and flags leftover VMs
 - Firewall rules kept in sync with the ports actually in use
 - The primary host is never scaled down; host auto-scaling is **off by default** so configuring GCP never causes surprise billing
 
 **Dashboard**
-- Token-authenticated web UI on port `8080`
-- **Fleet:** live instances, player counts, addresses, join codes, live log streaming, player-history chart, restart/stop
-- **Hosts:** per-host CPU and memory gauges and instance counts, with drill-down into that host's instances
+- **Fleet:** live instances, player counts, capacity, addresses, join codes, live log streaming, per-instance player history, restart/stop, plus fleet-wide stats including peak concurrent players
+- **Hosts:** per-host CPU and memory gauges, which instances are running where, the primary host clearly badged, and a "Create Host" button for provisioning on demand
 - **Config:** most settings apply live, without a restart
 
+**Security**
+- Two separate tokens, not one: an **admin token** (full dashboard control — start/stop/restart instances, change config, create/delete hosts) and a **client token** (read-only — lets a game client discover an available server and nothing else). Ship only the client token to players; the admin token never leaves your infrastructure.
+
 **Setup automation**
-- `install.sh` checks prerequisites, builds, and launches setup
-- `huginn init` generates your config and auth token, and can optionally:
+- `install.sh` checks prerequisites, offers to install Docker if missing, builds, and launches setup
+- `huginn init` generates your config and both tokens, and can optionally:
   - enable the required GCP APIs, grant IAM roles, and register an SSH key for provisioning
   - generate and install a systemd service so Huginn survives crashes and reboots
 
@@ -56,7 +58,7 @@ flowchart LR
     end
     GCP["GCP Compute API"]
 
-    Client -- "1. ask for a server (HTTP)" --> Core
+    Client -- "1. ask for a server (client token)" --> Core
     Client -- "2. connect directly (UDP)" --> G1
     Client -. "or" .-> G2
     G1 -- heartbeats --> Core
@@ -66,7 +68,7 @@ flowchart LR
 ```
 
 1. Game servers send heartbeats (player count, health) to Huginn.
-2. A client asks Huginn's API for an available server and gets back a real `ip:port`.
+2. A client asks Huginn's API — using its low-privilege client token — for an available server and gets back a real `ip:port`.
 3. The client connects **directly** to that server — Huginn is never in the game traffic path (the same allocation pattern Agones uses).
 
 ---
@@ -86,17 +88,18 @@ cd hugin
 ./install.sh
 ```
 
-`install.sh` builds Huginn and runs `huginn init`. Answer the prompts; saying yes to the automated GCP setup and the systemd install means Huginn is running when `init` finishes.
+`install.sh` checks for Docker (offering to install it on Debian/Ubuntu if missing), builds Huginn, and runs `huginn init`. Answer the prompts; saying yes to the automated GCP setup and the systemd install means Huginn is running when `init` finishes.
 
-**Open the dashboard** at `http://<vm-public-ip>:8080` and log in with the `auth_token` from `config.yaml`.
+**Open the dashboard** at `http://<vm-public-ip>:8080` and log in with the **admin `auth_token`** printed by `init` (also in `config.yaml`).
 
-**Connect your game** — ship a `huginn.json` next to your client executable:
+**Connect your game** — ship a `huginn.json` next to your client executable, using the **client token**, not the admin token:
 ```json
 {
   "huginnBaseUrl": "http://<vm-public-ip>:8080",
-  "huginnToken": "<auth_token from config.yaml>"
+  "huginnToken": "<client_auth_token from config.yaml>"
 }
 ```
+The client token can only ask "is a server available" — it cannot stop, restart, or reconfigure anything. Never ship `auth_token` to players.
 
 ➡️ **Full walkthrough, including manual alternatives for every automated step: [GET_STARTED.md](GET_STARTED.md)**
 
@@ -117,7 +120,8 @@ gcp_zone: us-central1-a
 host_auto_scaling_enabled: false       # opt in from the dashboard when ready
 host_scale_up_threshold_percent: 90
 host_scale_down_idle_minutes: 10
-auth_token: <generated by huginn init>
+auth_token: <generated by huginn init — admin, keep private>
+client_auth_token: <generated by huginn init — safe to ship to game clients>
 ```
 
 ---
@@ -128,7 +132,7 @@ auth_token: <generated by huginn init>
 - **`max_instances` is fleet-wide**, not per host.
 - **New hosts can only pull from `us-central1` Artifact Registry.**
 - **Huginn itself is a single point of failure.** Running game sessions keep going if it stops, but no new allocations or scaling happen until it's back. Acceptable at the target scale.
-- **One auth token** is shared by the dashboard and game clients.
+- **No rate limiting** on the client-facing discovery endpoints.
 - **GCP only** — AWS and bare-metal are not supported.
 
 ## Out of scope
@@ -139,4 +143,4 @@ Kubernetes support, matchmaking, and billing/cost tooling.
 
 ## Status
 
-Actively developed as a final-year Software Engineering project. Core fleet management, multi-host support, automatic host scaling in both directions, self-healing, authentication, and setup automation are implemented and tested live on GCP.
+Actively developed as a final-year Software Engineering project. Core fleet management, multi-host support, automatic host scaling in both directions, self-healing, scoped authentication, and setup automation are implemented and tested live on GCP.
