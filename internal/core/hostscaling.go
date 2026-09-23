@@ -226,7 +226,45 @@ func RunHostScalingLoop(ctx context.Context, hostPool *HostPool, hostRegistry *H
 		}
 	}
 }
+func RunReclaimLoop(ctx context.Context, hostPool *HostPool, reg *Registry, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			reclaimUnhealthy(ctx, hostPool, reg)
+		}
+	}
+}
+
+func reclaimUnhealthy(ctx context.Context, hostPool *HostPool, reg *Registry) {
+	for _, inst := range reg.All() {
+		if inst.State != "unhealthy" {
+			continue
+		}
+
+		cli, err := hostPool.Get(inst.HostID)
+		if err != nil {
+
+			log.Printf("huginn: reclaim: host %s for instance %s is gone, dropping stale registry entry", inst.HostID, inst.ID)
+			reg.Remove(inst.ID)
+			continue
+		}
+
+		log.Printf("huginn: reclaiming unhealthy instance %s (container %s) on host %s", inst.ID, shortID(inst.ContainerID), inst.HostID)
+
+		if err := StopAndRemove(ctx, cli, inst.ContainerID); err != nil {
+
+			log.Printf("huginn: reclaim: remove failed for %s (treating as already gone): %v", inst.ID, err)
+			reg.Remove(inst.ID)
+			continue
+		}
+		reg.Remove(inst.ID)
+	}
+}
 func GetPoolUtilization(ctx context.Context, hostPool *HostPool) ([]HostUtilization,  map[string]error) {
 	var results []HostUtilization
 	failed := make(map[string]error)

@@ -23,39 +23,6 @@ func shortID(id string) string {
 	return id
 }
 
-func RunReclaimLoop(ctx context.Context, cli *client.Client, reg *Registry, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			reclaimUnhealthy(ctx, cli, reg)
-		}
-	}
-}
-
-func reclaimUnhealthy(ctx context.Context, cli *client.Client, reg *Registry) {
-	for _, inst := range reg.All() {
-		if inst.State != "unhealthy" {
-			continue
-		}
-containerIDShort := inst.ContainerID
-if len(containerIDShort) > 12 {
-	containerIDShort = containerIDShort[:12]
-}
-log.Printf("huginn: reclaiming unhealthy instance %s (container %s)", inst.ID, shortID(inst.ContainerID))
-
-		if err := StopAndRemove(ctx, cli, inst.ContainerID); err != nil {
-			log.Printf("huginn: reclaim: remove failed for %s: %v", inst.ID, err)
-			continue
-		}
-		reg.Remove(inst.ID)
-	}
-}
-
 func ShutdownAll(cli *client.Client, reg *Registry, timeout time.Duration) {
 	instances := reg.All()
 	if len(instances) == 0 {

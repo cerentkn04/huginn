@@ -171,12 +171,12 @@ reg.Register(instanceID, containerID, hostID, address, cfg.MaxPlayers)
 			log.Printf("huginn: scale-down loop failed: %v", err)
 		}
 	}()
-		go func() {
+	go func() {
 		if err := core.RunHostScalingLoop(ctx, hostPool, hostRegistry, store, 15*time.Second); err != nil && ctx.Err() == nil {
 			log.Printf("huginn: host-scaling loop failed: %v", err)
 		}
 	}()
-	go core.RunReclaimLoop(ctx, cli, reg, 10*time.Second)
+	go core.RunReclaimLoop(ctx, hostPool, reg, 10*time.Second)
 	<-ctx.Done()
 
 	log.Println("huginn: shutting down")
