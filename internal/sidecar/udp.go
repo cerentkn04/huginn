@@ -3,25 +3,20 @@ package sidecar
 import (
 	"encoding/json"
 	"net"
-
 	"huginn/internal/types"
 )
-
 type UDPSender struct {
 	conn *net.UDPConn
 }
-
 func NewUDPSender(addr string) (*UDPSender, error) {
 	raddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
 	}
-
 	conn, err := net.DialUDP("udp", nil, raddr)
 	if err != nil {
 		return nil, err
 	}
-
 	return &UDPSender{conn: conn}, nil
 }
 func (s *UDPSender) Send(hb types.Heartbeat) error {

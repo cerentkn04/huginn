@@ -18,10 +18,8 @@ func RunLogParse(ctx context.Context, cfg Config, sender *UDPSender) error {
 	var playerCount int64
 
 	go tailFile(ctx, cfg.LogPath, &playerCount)
-
 	ticker := time.NewTicker(cfg.HeartbeatInterval)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():

@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { authFetch } from "../auth";
-function HistoryChart({ data }) {
+
+
+
+function HistoryChart({ data, maxPlayers }) {
   const containerRef = useRef(null);
   const plotRef = useRef(null);
 
@@ -12,9 +15,11 @@ function HistoryChart({ data }) {
 
     const times = data.map((s) => s.t);
     const counts = data.map((s) => s.c);
+    const peak = Math.max(maxPlayers || 1, ...counts);
 
     if (plotRef.current) {
       plotRef.current.setData([times, counts]);
+      plotRef.current.setScale("y", { min: 0, max: peak });
       return;
     }
 
@@ -23,30 +28,67 @@ function HistoryChart({ data }) {
     const opts = {
       width: rect.width,
       height: 220,
-      scales: { x: { time: true } },
+      scales: {
+        x: { time: true },
+        y: { range: () => [0, peak] },
+      },
       series: [
         {},
-        { label: "Players", stroke: "#4ade80", width: 2 },
+        {
+          label: "Players",
+          stroke: "#4ade80",
+          width: 2,
+          fill: "rgba(74, 222, 128, 0.12)",
+        },
       ],
       axes: [
-        { stroke: "#9ca3af", grid: { stroke: "#30363d" } },
-        { stroke: "#9ca3af", grid: { stroke: "#30363d" } },
+        { stroke: "#6b7280", grid: { stroke: "#1f2937", width: 1 }, font: "11px monospace" },
+        { stroke: "#6b7280", grid: { stroke: "#1f2937", width: 1 }, font: "11px monospace" },
       ],
+      hooks: {
+        draw: [
+          (u) => {
+            const { ctx } = u;
+            const y = u.valToPos(maxPlayers, "y", true);
+            ctx.save();
+            ctx.strokeStyle = "rgba(248, 113, 113, 0.45)";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(u.bbox.left, y);
+            ctx.lineTo(u.bbox.left + u.bbox.width, y);
+            ctx.stroke();
+            ctx.restore();
+          },
+        ],
+      },
     };
 
     plotRef.current = new uPlot(opts, [times, counts], containerRef.current);
 
+    const resizeObserver = new ResizeObserver(() => {
+      if (!containerRef.current || !plotRef.current) return;
+      plotRef.current.setSize({
+        width: containerRef.current.getBoundingClientRect().width,
+        height: 220,
+      });
+    });
+    resizeObserver.observe(containerRef.current);
+
     return () => {
+      resizeObserver.disconnect();
       plotRef.current?.destroy();
       plotRef.current = null;
     };
-  }, [data]);
+  }, [data, maxPlayers]);
 
   if (!data || data.length < 2) {
     return <div style={styles.sparklineEmpty}>Not enough data yet</div>;
   }
   return <div ref={containerRef} />;
 }
+
+
 
 const stateColors = {
   ready: "#4ade80",
@@ -60,6 +102,12 @@ function timeAgo(isoString) {
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);
   return `${minutes}m ago`;
+}
+
+function formatHeartbeat(isoString) {
+  const d = new Date(isoString);
+  const clock = d.toLocaleTimeString([], { hour12: false });
+  return `${timeAgo(isoString)} · ${clock}`;
 }
 
 function Field({ label, value, onCopy }) {
@@ -78,7 +126,7 @@ function Field({ label, value, onCopy }) {
   );
 }
 
-export default function Fleet({ instances, loaded, hostFilter, onClearFilter }) {
+export default function Fleet({ instances, loaded,  peakToday,  hostFilter, ostFilter, onClearFilter }) {
   const [selectedId, setSelectedId] = useState(null);
   const [confirmingStop, setConfirmingStop] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -165,31 +213,49 @@ const handleRestart = async (id) => {
 };
   return (
     <div style={styles.container}>
-      <div style={styles.summaryRow}>
-        <div style={styles.statCard}>
-          <div style={styles.statValue}>{loaded ? totalInstances : "—"}</div>
-          <div style={styles.statLabel}>Instances</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statValue}>{loaded ? totalPlayers : "—"}</div>
-          <div style={styles.statLabel}>Players</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statValue}>{loaded ? available : "—"}</div>
-          <div style={styles.statLabel}>Available</div>
-        </div>
-      </div>
+<div style={styles.summaryRow}>
+  <div style={{ ...styles.statCard, borderLeftColor: "#60a5fa" }}>
+    <div style={styles.statValue}>{loaded ? totalInstances : "—"}</div>
+    <div style={styles.statLabel}>Instances</div>
+  </div>
+  <div style={{ ...styles.statCard, borderLeftColor: "#4ade80" }}>
+    <div style={{ ...styles.statValue, color: "#4ade80" }}>{loaded ? totalPlayers : "—"}</div>
+    <div style={styles.statLabel}>Players</div>
+  </div>
+  <div style={{ ...styles.statCard, borderLeftColor: "#facc15" }}>
+    <div style={styles.statValue}>{loaded ? available : "—"}</div>
+    <div style={styles.statLabel}>Available</div>
+  </div>
+	    <div style={{ ...styles.statCard, borderLeftColor: "#c084fc" }}>
+    <div style={styles.statValue}>{loaded ? peakToday : "—"}</div>
+    <div style={styles.statLabelMuted}>Peak Today</div>
+  </div>
+</div>
 
+{loaded && totalInstances > 0 && (
+  <div style={styles.statePillsRow}>
+    {Object.entries(stateColors).map(([state, color]) => {
+      const count = instances.filter((i) => i.State === state).length;
+      if (count === 0) return null;
+      return (
+        <div key={state} style={styles.statePill}>
+          <span style={{ ...styles.dot, background: color }} />
+          {count} {state}
+        </div>
+      );
+    })}
+  </div>
+)}
       <div style={styles.splitView}>
         <div style={styles.sidebar}>
           {!loaded ? (
             <div style={styles.sidebarNote}>Loading fleet…</div>
-          ) :  displayedInstances.length === 0 ? (
-		   <div style={styles.sidebarNote}>
-    			{hostFilter ? `No instances on ${hostFilter}` : "No instances running"}
-  		   </div>
-            ) : (
-            displayedInstances.map((inst)=> (
+          ) : displayedInstances.length === 0 ? (
+            <div style={styles.sidebarNote}>
+              {hostFilter ? `No instances on ${hostFilter}` : "No instances running"}
+            </div>
+          ) : (
+            displayedInstances.map((inst) => (
               <div
                 key={inst.ID}
                 style={{
@@ -258,7 +324,7 @@ const handleRestart = async (id) => {
                 <>
                   <div style={styles.capacityBlock}>
                     <div style={styles.capacityLabel}>
-                      Capacity: {selected.PlayerCount}/{selected.MaxPlayers}
+                      {selected.PlayerCount} of {selected.MaxPlayers} slots filled
                     </div>
                     <div style={styles.barTrack}>
                       <div
@@ -281,7 +347,7 @@ const handleRestart = async (id) => {
                       value={selected.JoinCode}
                       onCopy={() => navigator.clipboard.writeText(selected.JoinCode)}
                     />
-                    <Field label="Last Heartbeat" value={selected.LastHeartbeat} />
+                    <Field label="Last Heartbeat" value={formatHeartbeat(selected.LastHeartbeat)} />
                   </div>
                 </>
               ) : (
@@ -353,7 +419,7 @@ const handleRestart = async (id) => {
 {selected && (
   <div style={styles.historyPane}>
     <h4 style={styles.historyTitle}>Player History</h4>
-    <HistoryChart data={selected.PlayerHistory} />
+<HistoryChart data={selected.PlayerHistory} maxPlayers={selected.MaxPlayers} />	
   </div>
 )}
       </div>
@@ -362,26 +428,30 @@ const handleRestart = async (id) => {
 }
 
 const styles = {
-  container: { padding: "24px" },
-  summaryRow: { display: "flex", gap: "16px", marginBottom: "24px" },
-  statCard: {
-    background: "#161b22",
-    color: "#fff",
-    padding: "16px 24px",
-    borderRadius: "8px",
-    textAlign: "center",
-  },
-  statValue: { fontSize: "24px", fontWeight: "bold" },
+container: { padding: "24px" },
+  summaryRow: { display: "flex", gap: "16px", marginBottom: "24px", maxWidth: "900px" },
+	statCard: {
+  background: "#161b22",
+  minWidth: "160px",
+  border: "1px solid #21262d",
+  color: "#fff",
+  padding: "16px 24px",
+  borderRadius: "8px",
+  textAlign: "center",
+  borderLeft: "3px solid #30363d",
+},
+    statValue: { fontSize: "24px", fontWeight: "bold" },
   statLabel: { fontSize: "13px", color: "#9ca3af" },
+  statLabelMuted: { fontSize: "12px", color: "#6b7280", fontStyle: "italic" },
+splitView: { display: "flex", gap: "16px", alignItems: "flex-start" },
 
-  splitView: { display: "flex", gap: "16px" },
-
-  sidebar: {
-    width: "280px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "6px",
-  },
+sidebar: {
+  width: "260px",
+  flexShrink: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: "6px",
+},
   sidebarNote: {
     color: "#6b7280",
     fontSize: "13px",
@@ -401,16 +471,15 @@ const styles = {
   id: { fontWeight: "bold", marginRight: "auto", fontSize: "13px" },
   players: { color: "#ccc", fontSize: "12px" },
   heartbeat: { color: "#9ca3af", fontSize: "11px" },
-
-  detailPane: {
-    flex: 1,
-    background: "#161b22",
-    borderRadius: "8px",
-    padding: "24px",
-    color: "#fff",
-    minHeight: "300px",
-  },
-  detailHeader: {
+detailPane: {
+  flex: "1.3 1 0",
+  background: "#161b22",
+  borderRadius: "8px",
+  padding: "24px",
+  color: "#fff",
+  minHeight: "300px",
+},
+   detailHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
@@ -461,15 +530,33 @@ tabButtonActive: { color: "#fff", borderBottom: "2px solid #4ade80" },
     color: "#6b7280",
     marginBottom: "2px",
   },
-    historyPane: {
-    width: "320px",
-    background: "#161b22",
-    borderRadius: "8px",
-    padding: "24px",
-    color: "#fff",
-    minHeight: "300px",
-  },
-	filterBanner: {
+	historyPane: {
+  flex: "1.7 1 0",
+  minWidth: "320px",
+  background: "#161b22",
+  borderRadius: "8px",
+  padding: "24px",
+  color: "#fff",
+  minHeight: "300px",
+},
+	statePillsRow: {
+  display: "flex",
+  gap: "10px",
+  marginBottom: "24px",
+  marginTop: "-12px",
+},
+statePill: {
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+  background: "#161b22",
+  border: "1px solid #30363d",
+  borderRadius: "999px",
+  padding: "4px 12px",
+  fontSize: "12px",
+  color: "#9ca3af",
+},
+  	filterBanner: {
   display: "flex",
   alignItems: "center",
   gap: "10px",
@@ -536,15 +623,18 @@ clearFilterButton: {
   confirmActions: { display: "flex", gap: "8px" },
 logPane: {
   marginTop: "16px",
-  background: "#0d1117",
+  background: "#0a0d12",
   border: "1px solid #30363d",
   borderRadius: "6px",
-  padding: "12px",
-  maxHeight: "240px",
+  padding: "14px 16px",
+  maxHeight: "360px",
   overflowY: "auto",
-  fontSize: "12px",
-  color: "#9ca3af",
+  fontSize: "12.5px",
+  lineHeight: "1.6",
+  fontFamily: "'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace",
+  color: "#8b949e",
   whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
 },
   error: {
     display: "inline-block",

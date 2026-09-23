@@ -15,12 +15,16 @@ export default function App() {
   const [status, setStatus] = useState("connecting");
   const [connected, setConnected] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [peakToday, setPeakToday] = useState(0);
 
   useEffect(() => {
     if (!loggedIn) return;
     const es = authEventSource("/api/fleet/stream");
     es.onopen = () => setConnected(true);
-
+    es.addEventListener("peak", (event) => {
+      const n = Number(event.data);
+      if (!Number.isNaN(n)) setPeakToday(n);
+    });
     es.onmessage = (event) => {
       try {
         setInstances(JSON.parse(event.data));
@@ -59,11 +63,12 @@ export default function App() {
           <Fleet
             instances={instances}
             loaded={loaded}
+            peakToday={peakToday}
             hostFilter={hostFilter}
             onClearFilter={() => setHostFilter(null)}
           />
         ) : activeTab === "hosts" ? (
-          <Hosts onSelectHost={goToHost} />
+          <Hosts onSelectHost={goToHost} instances={instances} />
         ) : (
           <Config />
         )}

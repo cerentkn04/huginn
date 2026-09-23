@@ -53,8 +53,28 @@ type Registry struct {
 	mu        sync.RWMutex
 	instances map[string]*Instance
 	timeout   time.Duration
+	peakToday int
+	peakDay   string
 }
+func (r *Registry) SampleFleetPeak() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
+	today := time.Now().Format("2006-01-02")
+	if r.peakDay != today {
+		r.peakDay = today
+		r.peakToday = 0
+	}
+
+	total := 0
+	for _, inst := range r.instances {
+		total += inst.PlayerCount
+	}
+	if total > r.peakToday {
+		r.peakToday = total
+	}
+	return r.peakToday
+}
 func NewRegistry(heartbeatTimeout time.Duration) *Registry {
 	return &Registry{
 		instances: make(map[string]*Instance),
