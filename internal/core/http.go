@@ -288,6 +288,10 @@ func ApiCode(mux *http.ServeMux, reg *Registry) {
 			http.Error(w, "server not found", http.StatusNotFound)
 			return
 		}
+		if inst.State != StateReady || inst.PlayerCount >= inst.MaxPlayers {
+			http.Error(w, "server is full", http.StatusServiceUnavailable)
+			return
+		}
 		json.NewEncoder(w).Encode(inst)
 	})
 }

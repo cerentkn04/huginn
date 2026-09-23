@@ -2,12 +2,11 @@ package core
 
 import (
 	"context"
-	"github.com/docker/docker/client"
 	"log"
 	"time"
 )
 
-func RunScaleDown(ctx context.Context, cli *client.Client, store *ConfigStore, reg *Registry) error {
+func RunScaleDown(ctx context.Context, hostPool *HostPool, store *ConfigStore, reg *Registry) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -27,8 +26,15 @@ func RunScaleDown(ctx context.Context, cli *client.Client, store *ConfigStore, r
 			}
 			if found {
 				if draining.PlayerCount == 0 {
+					cli, err := hostPool.Get(draining.HostID)
+					if err != nil {
+						log.Printf("huginn: scale-down: host %s for instance %s is gone, dropping stale registry entry", draining.HostID, draining.ID)
+						reg.Remove(draining.ID)
+						continue
+					}
 					if err := StopInstance(ctx, cli, draining.ContainerID); err != nil {
-						log.Printf("huginn: scale-down: failed to stop %s: %v", draining.ID, err)
+						log.Printf("huginn: scale-down: failed to stop %s (treating as already gone): %v", draining.ID, err)
+						reg.Remove(draining.ID)
 						continue
 					}
 					reg.Remove(draining.ID)

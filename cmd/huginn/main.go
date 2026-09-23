@@ -167,7 +167,7 @@ reg.Register(instanceID, containerID, hostID, address, cfg.MaxPlayers)
 		}
 	}()
 	go func() {
-		if err := core.RunScaleDown(ctx, cli, store, reg); err != nil && ctx.Err() == nil {
+		if err := core.RunScaleDown(ctx, hostPool, store, reg); err != nil && ctx.Err() == nil {
 			log.Printf("huginn: scale-down loop failed: %v", err)
 		}
 	}()
