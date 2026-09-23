@@ -79,6 +79,7 @@ flowchart LR
 - A GCP project with billing enabled
 - A GCE VM to run Huginn, created with the **`cloud-platform` access scope**, with Docker, Go, and the gcloud CLI installed
 - Your game server, integrated with the Huginn SDK, built as a Docker image and pushed to **Artifact Registry** in `us-central1`
+  (new to Docker? see [DOCKER_IMAGE_GUIDE.md](DOCKER_IMAGE_GUIDE.md) for a copy-paste walkthrough)
 - `gcloud auth login` as a project **owner** (needed only for the automated IAM setup)
 
 **Install**
