@@ -18,3 +18,4 @@ host_auto_scaling_enabled: false
 host_scale_up_threshold_percent: 90.0
 host_scale_down_idle_minutes: 10
 auth_token: REPLACE_ME_run_huginn_init
+client_auth_token: REPLACE_ME_run_huginn_init

@@ -1,4 +1,4 @@
 {
   "huginnBaseUrl": "http://136.115.141.26:8080",
-  "huginnToken": "926cc82054d8ed0bfd8dc72532cff55f20dcf54644ba219b25a06d15e17aa88c"
+  "huginnToken": "REPLACE_WITH_client_auth_token_FROM_configs/live.yaml"
 }
