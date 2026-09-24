@@ -62,9 +62,14 @@ func main() {
 	}
 
 	defer cli.Close()
+	primaryHostID, err := os.Hostname()
+	if err != nil || primaryHostID == "" {
+		log.Printf("huginn: could not determine hostname (%v) — using \"primary\" as this host's ID", err)
+		primaryHostID = "primary"
+	}
 	hostPool := core.NewHostPool()
-	hostPool.Add("gamegin", cli)
-	hostPool.SetPrimary("gamegin")
+	hostPool.Add(primaryHostID, cli)
+	hostPool.SetPrimary(primaryHostID)
 	go func() {
 		hosts, err := core.ListManagedHosts(ctx, cfg.GCPProject, cfg.GCPZone)
 		if err != nil {
@@ -87,7 +92,7 @@ func main() {
 	}
 	cfg.InternalHost = core.DiscoverInternalHost(cfg)
 		if cfg.InternalHost == "" {
-			hostPool.SetPublicIP("gamegin", cfg.PublicHost)
+			hostPool.SetPublicIP(primaryHostID, cfg.PublicHost)
 		log.Println("huginn: WARNING: could not determine internal host address; sidecar heartbeats may fail")
 	}
 	cfg.PublicHost = core.DiscoverPublicHost(cfg)
