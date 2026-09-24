@@ -67,11 +67,16 @@ command -v gcloud >/dev/null || fail \
   "gcloud CLI is not installed — see https://cloud.google.com/sdk/docs/install"
 
 # --- Go / build -----------------------------------------------------------
-command -v go >/dev/null || fail \
-  "Go is not installed — see https://go.dev/doc/install"
-
-echo "Building huginn..."
-go build -o huginn ./cmd/huginn
-echo "Built $(pwd)/huginn"
+if [ -x ./huginn ]; then
+  echo "Found existing ./huginn binary — skipping build."
+elif command -v go >/dev/null; then
+  echo "Building huginn..."
+  go build -o huginn ./cmd/huginn
+  echo "Built $(pwd)/huginn"
+else
+  fail "No ./huginn binary found and Go is not installed. Either:
+     - download a prebuilt binary: curl -L -o huginn https://github.com/cerentkn04/huginn/releases/latest/download/huginn && chmod +x huginn
+     - or install Go: https://go.dev/doc/install"
+fi
 
 ./huginn init
