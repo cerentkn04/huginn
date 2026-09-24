@@ -10,7 +10,11 @@ Read this top to bottom the first time. After that, only [Step 4](#step-4-huginn
 
 You'll need:
 
-- **A GCP project** with billing enabled.
+- **A GCP project** with billing enabled. Once created, find its **project ID** (not the display name you typed) with:
+```bash
+  gcloud config get-value project
+```
+  You'll need this exact value repeatedly below.
 - **A GCE VM to run Huginn on.** See [Creating the VM](#creating-the-vm) below if you've never done this — the access-scope setting there is the single most common thing to get wrong.
 - **Docker, Go, and the gcloud CLI** on that VM. `install.sh` (below) can install Docker for you if it's missing; `gcloud` is preinstalled on GCP's own VM images. Go is only needed if you're building from source — skip it if you're using the [prebuilt release binary](https://github.com/cerentkn04/huginn/releases/latest).
 - **Your game server as a Docker image**, pushed to **Artifact Registry in `us-central1`**. New hosts Huginn provisions are currently only configured to pull from that region — using a different region will leave auto-provisioned hosts unable to pull your image.
@@ -23,7 +27,14 @@ You'll need:
 3. Machine type: `e2-small` or `e2-medium` is enough for testing.
 4. Boot disk: **Debian or Ubuntu** — required, since `install.sh`'s Docker auto-install assumes `apt`.
 5. **Expand "Identity and API access"** and set **Access scopes** to **"Allow full access to all Cloud APIs."** This is the `cloud-platform` scope. It's easy to miss since this section is usually collapsed by default.
-   - **This cannot be added later without stopping the VM.** If you skip it, Huginn will start but every GCP-touching feature — firewall management, public IP discovery, host provisioning — will fail with a `403: Request had insufficient authentication scopes` error, no matter what IAM roles you grant afterward. See [Troubleshooting](#troubleshooting) if this happens to you.
+   - **This cannot be added later without stopping the VM.** If you skip it, Huginn will start but every GCP-touching feature — firewall management, public IP discovery, host provisioning — will fail with a `403: Request had insufficient authentication scopes` error, no matter what IAM roles you grant afterward.
+   - **If you already created the VM without this scope**, you don't need to recreate it — stop it and either edit it in the Console (Access scopes → "Allow full access to all Cloud APIs") or run:
+```bash
+     gcloud compute instances stop <vm-name> --zone=<zone>
+     gcloud compute instances set-service-account <vm-name> --zone=<zone> --scopes=cloud-platform
+     gcloud compute instances start <vm-name> --zone=<zone>
+```
+     The VM's external IP may change after restarting — check it again before retrying the dashboard. (If the Console edit fails with "Supplied fingerprint does not match current metadata fingerprint," that's a stale-cache error — just reload the edit page and try again.)
 6. Create the VM, then connect via its **SSH** button in the Console (no key setup needed).
 
 ---
@@ -37,33 +48,7 @@ Before building your image, your game server needs to talk to Huginn. This is de
 
 ---
 
-## Step 2: Build and push your image
-
-If you're not familiar with Docker, see **[DOCKER_IMAGE_GUIDE.md](DOCKER_IMAGE_GUIDE.md)** for a full copy-and-fill-in walkthrough — it covers the `Dockerfile` and `start.sh` needed to package your server together with Huginn's sidecar, using only prebuilt binaries if you don't have Go installed.
-
-Once you have an image built:
-
-```bash
-gcloud artifacts repositories create <repo-name> \
-  --repository-format=docker \
-  --location=us-central1
-
-gcloud auth configure-docker us-central1-docker.pkg.dev
-
-docker build -t my-server:latest .
-docker tag my-server:latest us-central1-docker.pkg.dev/<project-id>/<repo-name>/my-server:latest
-docker push us-central1-docker.pkg.dev/<project-id>/<repo-name>/my-server:latest
-```
-
-`gcloud auth configure-docker` is a one-time step per machine — without it, `docker push` fails with an authentication error.
-
-**Finding your project ID:** click the project selector at the top of the GCP Console, or run `gcloud config get-value project`. This is different from the project's display name (what you typed when creating it) and different from the Artifact Registry repo name you just created — all three can look similar but are three separate values.
-
-Keep the full `docker tag` path handy — `huginn init` will ask for it as your Docker image.
-
----
-
-## Step 3: Get Huginn and run the installer
+## Step 2: Get Huginn and run the installer
 
 **Option A — build from source:**
 ```bash
@@ -86,7 +71,40 @@ Either way, `install.sh`:
 2. Checks Docker is actually running and that your user can reach it.
 3. Checks for the `gcloud` CLI.
 4. Gets the `huginn` binary (builds from source, or downloads the release, whichever applies).
-5. Runs `huginn init`.
+5. Runs `huginn init` — **you can Ctrl-C out of it here** and come back once your image is built (Step 3 below), since `init` will ask for the image path.
+
+---
+
+## Step 3: Build and push your image
+
+If you're not familiar with Docker, see **[DOCKER_IMAGE_GUIDE.md](DOCKER_IMAGE_GUIDE.md)** for the full walkthrough. The short version:
+
+**1. Get the sidecar binary** (no Go needed — this is the small companion program that sends heartbeats to Huginn on your game server's behalf). In the folder with your game server build:
+```bash
+curl -L -o sidecar https://github.com/cerentkn04/huginn/releases/latest/download/sidecar
+chmod +x sidecar
+```
+
+**2. Write a `Dockerfile`** that copies your build, the sidecar, and a `start.sh` into an image — see DOCKER_IMAGE_GUIDE.md for the exact template and a `start.sh` example.
+
+**3. Create the registry, authenticate Docker, then build/tag/push:**
+```bash
+gcloud artifacts repositories create <repo-name> \
+  --repository-format=docker \
+  --location=us-central1
+
+gcloud auth configure-docker us-central1-docker.pkg.dev
+
+docker build -t my-server:latest .
+docker tag my-server:latest us-central1-docker.pkg.dev/<project-id>/<repo-name>/my-server:latest
+docker push us-central1-docker.pkg.dev/<project-id>/<repo-name>/my-server:latest
+```
+
+`gcloud auth configure-docker` is a one-time step per machine — without it, `docker push` fails with an authentication error.
+
+Don't have `<project-id>` handy? `gcloud config get-value project` prints it. This is different from the project's display name and different from the Artifact Registry repo name — three separate values that can look similar.
+
+Keep the full `docker tag` path — that's what `huginn init` (Step 2, or Step 4 if you're resuming it) asks for as your Docker image.
 
 ---
 
@@ -94,7 +112,7 @@ Either way, `install.sh`:
 
 This is interactive. It asks for:
 
-- **Game name, Docker image** (the full path from Step 2), **min/max instances, max players per instance, UDP port.**
+- **Game name, Docker image** (the full path from Step 3), **min/max instances, max players per instance, UDP port.**
 - **GCP project ID and zone** — format-checked immediately (letters/digits/hyphens, valid zone shape). No GCP API calls happen yet at this point.
 
 Then it offers **automated GCP setup**, off by default since it makes real changes to your project:
@@ -115,14 +133,18 @@ If you say yes, it:
 
 If you say no to any of this, `init` tells you exactly what to run manually and keeps going — nothing else is blocked.
 
-It then prints **two generated tokens** — read this carefully, it matters:Two tokens were generated:
-auth_token (admin — dashboard login, full control): <...>
-client_auth_token (players — server discovery only): <...>
-Put ONLY client_auth_token in huginn.json for your game client. Never ship auth_token to players.
+It then prints **two generated tokens** — read this carefully, it matters:
+hen prints **two generated tokens** — read this carefully, it matters:y and keeps going — nothing else 
+>  
 - **`auth_token`** logs into the dashboard and can stop/restart/reconfigure your whole fleet. Keep it private.
 - **`client_auth_token`** can only ask "is a server available" — nothing else. This is the one your game ships to players.
 
-Both are also saved in `config.yaml`, and `client_auth_token` is visible (with a copy button) on the dashboard's Config tab if you need to grab it again later.
+Both are also saved in `config.yaml`. If you need either one again later:
+```bash
+grep "^auth_token:" config.yaml
+grep "^client_auth_token:" config.yaml
+```
+`client_auth_token` is also visible (with a copy button) on the dashboard's Config tab.
 
 Then it offers a **systemd service file**:
 
@@ -137,7 +159,8 @@ If you say yes to installing, **Huginn is already running by the time `init` fin
 
 ---
 
-## Step 5: Open the dashboardhttp://<vm-public-ip>:8080
+## Step 5: Open the dashboard  
+
 Log in with the **admin `auth_token`** from `config.yaml`.
 
 - **Fleet** — live instances, player counts, capacity, join codes, live log streaming, per-instance player history, restart/stop. Summary cards at the top show total instances, current players, available slots, and peak concurrent players for the day.
@@ -168,6 +191,11 @@ Ship a `huginn.json` file next to your client's executable, using the **client t
 }
 ```
 
+Forgot the value? Retrieve it any time with:
+```bash
+grep "^client_auth_token:" config.yaml
+```
+
 For Unity clients, `HuginnClient.cs` reads this on startup (alternatively via a `-huginn <url>` / `-huginntoken <token>` command-line flag, or Inspector fields) and exposes:
 
 - `HuginnClient.Instance.FindServer(onSuccess, onError)` — quick-join, returns any server with free slots.
@@ -195,19 +223,10 @@ Your VM was created without the `cloud-platform` access scope. Confirm with:
 curl -s -H "Metadata-Flavor: Google" \
   "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/scopes"
 ```
-If `https://www.googleapis.com/auth/cloud-platform` is missing from the list, stop the VM and either edit it in the Console (Access scopes → "Allow full access to all Cloud APIs") or run:
-```bash
-gcloud compute instances stop <vm-name> --zone=<zone>
-gcloud compute instances set-service-account <vm-name> --zone=<zone> --scopes=cloud-platform
-gcloud compute instances start <vm-name> --zone=<zone>
-```
-The VM's external IP may change after restarting — check it again before retrying the dashboard.
+If `https://www.googleapis.com/auth/cloud-platform` is missing from the list, see [Creating the VM](#creating-the-vm) above for the fix.
 
 **`firewall: missing permission to manage GCP firewall rules` keeps appearing in the logs.**
 See the note in [Step 4](#step-4-huginn-init) — the automated setup currently misses one IAM role. Run the `gcloud projects add-iam-policy-binding` command Huginn prints in that log line, then restart.
-
-**"Editing VM instance failed: Supplied fingerprint does not match current metadata fingerprint."**
-A stale GCP Console cache, not a real error. Reload the VM's edit page and try again.
 
 ---
 
