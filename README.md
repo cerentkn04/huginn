@@ -91,6 +91,14 @@ cd hugin
 
 `install.sh` checks for Docker (offering to install it on Debian/Ubuntu if missing), builds Huginn, and runs `huginn init`. Answer the prompts; saying yes to the automated GCP setup and the systemd install means Huginn is running when `init` finishes.
 
+**No Go installed?** Skip building from source and grab a prebuilt binary from [Releases](https://github.com/cerentkn04/huginn/releases/latest) instead:
+```bash
+curl -L -o huginn https://github.com/cerentkn04/huginn/releases/latest/download/huginn
+chmod +x huginn
+./huginn init
+```
+Docker and the gcloud CLI are still required either way.
+
 **Open the dashboard** at `http://<vm-public-ip>:8080` and log in with the **admin `auth_token`** printed by `init` (also in `config.yaml`).
 
 **Connect your game** — ship a `huginn.json` next to your client executable, using the **client token**, not the admin token:
